@@ -184,6 +184,11 @@ A/B OTA specific options
   --incremental_block_based <boolean>
       Enable block based incremental updates
       Disabled by default.
+
+  --backup <boolean>
+      Enable or disable the execution of backuptool.sh.
+      Disabled by default.
+
 """
 
 from __future__ import print_function
@@ -246,6 +251,7 @@ OPTIONS.retrofit_dynamic_partitions = False
 OPTIONS.skip_compatibility_check = False
 OPTIONS.output_metadata_path = None
 OPTIONS.override_device = 'auto'
+OPTIONS.backuptool = False
 
 
 METADATA_NAME = 'META-INF/com/android/metadata'
@@ -1393,6 +1399,11 @@ else if get_stage("%(bcb_dev)s") == "3/3" then
   script.SetPermissionsRecursive("/tmp/install", 0, 0, 0o755, 0o644, None, None)
   script.SetPermissionsRecursive("/tmp/install/bin", 0, 0, 0o755, 0o755, None, None)
 
+  if OPTIONS.backuptool:
+    script.Mount("/system")
+    script.RunBackup("backup")
+    script.Unmount("/system")
+
   # All other partitions as well as the data wipe use 10% of the progress, and
   # the update of the system partition takes the remaining progress.
   system_progress = 0.9 - (len(block_diff_dict) - 1) * 0.1
@@ -1423,6 +1434,12 @@ else if get_stage("%(bcb_dev)s") == "3/3" then
   common.ZipWriteStr(output_zip, "boot.img", boot_img.data)
 
   device_specific.FullOTA_PostValidate()
+
+  if OPTIONS.backuptool:
+    script.ShowProgress(0.02, 10)
+    script.Mount("/system")
+    script.RunBackup("restore")
+    script.Unmount("/system")
 
   script.WriteRawImage("/boot", "boot.img")
 
@@ -2872,6 +2889,8 @@ def main(argv):
       OPTIONS.override_device = a
     elif o in ("--incremental_block_based"):
       OPTIONS.incremental_block_based = bool(a.lower() == 'true')
+    elif o in ("--backup"):
+      OPTIONS.backuptool = bool(a.lower() == 'true')
     else:
       return False
     return True
@@ -2908,6 +2927,7 @@ def main(argv):
                                  "output_metadata_path=",
                                  "override_device=",
                                  "incremental_block_based=",
+                                 "backup=",
                              ], extra_option_handler=option_handler)
 
   if len(args) != 2:
