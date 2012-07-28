@@ -1045,6 +1045,13 @@ define generate_generic_boot_image_certificate
     --name "$(3)" --output "$(2)" "$(1)"
 endef
 
+INSTALLED_DTIMAGE_TARGET := $(PRODUCT_OUT)/dt.img
+
+ifeq ($(strip $(BOARD_KERNEL_SEPARATED_DT)),true)
+  INTERNAL_BOOTIMAGE_ARGS += --dt $(INSTALLED_DTIMAGE_TARGET)
+  BOOTIMAGE_EXTRA_DEPS    := $(INSTALLED_DTIMAGE_TARGET)
+endif
+
 INTERNAL_GKI_CERTIFICATE_ARGS :=
 INTERNAL_GKI_CERTIFICATE_DEPS :=
 ifdef BOARD_GKI_SIGNING_KEY_PATH
@@ -1150,7 +1157,7 @@ define build_boot_supports_vboot
   $(call assert-max-image-size,$(1),$(call get-bootimage-partition-size,$(1),boot))
 endef
 
-$(INSTALLED_BOOTIMAGE_TARGET): $(MKBOOTIMG) $(INTERNAL_BOOTIMAGE_FILES) $(VBOOT_SIGNER) $(FUTILITY)
+$(INSTALLED_BOOTIMAGE_TARGET): $(MKBOOTIMG) $(INTERNAL_BOOTIMAGE_FILES) $(VBOOT_SIGNER) $(FUTILITY) $(BOOTIMAGE_EXTRA_DEPS)
 	$(call pretty,"Target boot image: $@")
 	$(call build_boot_supports_vboot,$@)
 
@@ -1172,7 +1179,7 @@ define build_boot_novboot
   $(call assert-max-image-size,$1,$(call get-bootimage-partition-size,$(1),boot))
 endef
 
-$(INSTALLED_BOOTIMAGE_TARGET): $(MKBOOTIMG) $(INTERNAL_BOOTIMAGE_FILES)
+$(INSTALLED_BOOTIMAGE_TARGET): $(MKBOOTIMG) $(INTERNAL_BOOTIMAGE_FILES) $(BOOTIMAGE_EXTRA_DEPS)
 	$(call pretty,"Target boot image: $@")
 	$(call build_boot_novboot,$@)
 
@@ -2401,6 +2408,11 @@ ifndef BOARD_RECOVERY_MKBOOTIMG_ARGS
   BOARD_RECOVERY_MKBOOTIMG_ARGS := $(BOARD_MKBOOTIMG_ARGS)
 endif
 
+ifeq ($(strip $(BOARD_KERNEL_SEPARATED_DT)),true)
+  INTERNAL_RECOVERYIMAGE_ARGS += --dt $(INSTALLED_DTIMAGE_TARGET)
+  RECOVERYIMAGE_EXTRA_DEPS    := $(INSTALLED_DTIMAGE_TARGET)
+endif
+
 $(INTERNAL_RECOVERY_RAMDISK_FILES_TIMESTAMP): $(MKBOOTFS) \
 	    $(INTERNAL_ROOT_FILES) \
 	    $(INSTALLED_RAMDISK_TARGET) \
@@ -2513,7 +2525,7 @@ UNMOUNTED_NOTICE_DEPS += $(INSTALLED_BOOTIMAGE_TARGET)
 endif # BOARD_USES_RECOVERY_AS_BOOT
 
 ifndef BOARD_CUSTOM_BOOTIMG_MK
-$(INSTALLED_RECOVERYIMAGE_TARGET): $(recoveryimage-deps)
+$(INSTALLED_RECOVERYIMAGE_TARGET): $(recoveryimage-deps) $(RECOVERYIMAGE_EXTRA_DEPS)
 	$(call build-recoveryimage-target, $@, \
 	  $(if $(filter true, $(BOARD_EXCLUDE_KERNEL_FROM_RECOVERY_IMAGE)),, $(recovery_kernel)))
 else
@@ -5719,6 +5731,9 @@ endif
 ifdef BOARD_KERNEL_PAGESIZE
 	echo "$(BOARD_KERNEL_PAGESIZE)" > $(zip_root)/$(PRIVATE_RECOVERY_OUT)/pagesize
 endif
+ifeq ($(strip $(BOARD_KERNEL_SEPARATED_DT)),true)
+	$(hide) $(ACP) $(INSTALLED_DTIMAGE_TARGET) $(zip_root)/$(PRIVATE_RECOVERY_OUT)/dt
+endif
 endif # not (BUILDING_VENDOR_BOOT_IMAGE and BOARD_USES_RECOVERY_AS_BOOT)
 endif # INSTALLED_RECOVERYIMAGE_TARGET defined or BOARD_USES_RECOVERY_AS_BOOT is true
 	@# Components of the boot image
@@ -5750,6 +5765,9 @@ ifdef BOARD_KERNEL_BASE
 endif
 ifdef BOARD_KERNEL_PAGESIZE
 	echo "$(BOARD_KERNEL_PAGESIZE)" > $(zip_root)/BOOT/pagesize
+endif
+ifeq ($(strip $(BOARD_KERNEL_SEPARATED_DT)),true)
+	$(hide) $(ACP) $(INSTALLED_DTIMAGE_TARGET) $(zip_root)/BOOT/dt
 endif
 endif # INSTALLED_VENDOR_BOOTIMAGE_TARGET == "" && BOARD_USES_GENERIC_KERNEL_IMAGE != true
 endif # BOARD_USES_RECOVERY_AS_BOOT not true
