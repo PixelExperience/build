@@ -23,10 +23,6 @@ PRODUCT_PACKAGES := \
     libfwdlockengine \
     WAPPushManager
 
-PRODUCT_PACKAGES += \
-    LiveWallpapersPicker \
-    PhotoTable
-
 # Bluetooth:
 #   audio.a2dp.default is a system module. Generic system image includes
 #   audio.a2dp.default to support A2DP if board has the capability.
