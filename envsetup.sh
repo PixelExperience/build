@@ -1597,6 +1597,23 @@ function enable_zsh_completion() {
     fi
 }
 
+
+function __detect_shell() {
+    case `ps -o command -p $$` in
+        *bash*)
+            echo bash
+            ;;
+        *zsh*)
+            echo zsh
+            ;;
+        *)
+            echo unknown
+            return 1
+            ;;
+    esac
+    return
+}
+
 function validate_current_shell() {
     local current_sh="$(ps -o command -p $$)"
     case "$current_sh" in
