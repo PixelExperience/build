@@ -1,24 +1,23 @@
-
 # List of variables we want to print in the build banner.
 print_build_config_vars := \
-  PLATFORM_VERSION_CODENAME \
-  PLATFORM_VERSION \
   CUSTOM_VERSION \
-  TARGET_PRODUCT \
   TARGET_BUILD_VARIANT \
   TARGET_ARCH \
   TARGET_ARCH_VARIANT \
   TARGET_CPU_VARIANT \
-  HOST_ARCH \
-  HOST_2ND_ARCH \
-  HOST_OS \
-  HOST_OS_EXTRA \
-  HOST_CROSS_OS \
-  HOST_CROSS_ARCH \
-  HOST_CROSS_2ND_ARCH \
-  HOST_BUILD_TYPE \
+
+ifneq ($(TARGET_2ND_ARCH_VARIANT),)
+print_build_config_vars += \
+  TARGET_2ND_ARCH_VARIANT
+endif
+
+ifneq ($(TARGET_2ND_CPU_VARIANT),)
+print_build_config_vars += \
+  TARGET_2ND_CPU_VARIANT
+endif
+
+print_build_config_vars += \
   BUILD_ID \
-  OUT_DIR \
   AUX_OS_VARIANT_LIST
 
 ifeq ($(SDCLANG),true)
