@@ -483,6 +483,23 @@ else if get_stage("%(bcb_dev)s") == "3/3" then
   script.Print("Target: %s" % target_fp)
 
   script.AppendExtra("ifelse(is_mounted(\"/system\"), unmount(\"/system\"));")
+
+  android_version = GetBuildProp("ro.build.version.release", OPTIONS.info_dict)
+  build_id = GetBuildProp("ro.build.id", OPTIONS.info_dict)
+  build_date = GetBuildProp("org.pixelexperience.build_date", OPTIONS.info_dict)
+  security_patch = GetBuildProp("ro.build.version.security_patch", OPTIONS.info_dict)
+  device = GetBuildProp("ro.product.device", OPTIONS.info_dict)
+
+  script.Print("----------------------------------------------");
+  script.Print("              Pixel Experience");
+  script.Print("               by jhenrique09");
+  script.Print("----------------------------------------------");
+  script.Print(" Android version: %s"%(android_version));
+  script.Print(" Build id: %s"%(build_id));
+  script.Print(" Build date: %s"%(build_date));
+  script.Print(" Security patch: %s"%(security_patch));
+  script.Print(" Device: %s"%(device));
+  script.Print("----------------------------------------------");
   device_specific.FullOTA_InstallBegin()
 
   CopyInstallTools(output_zip)
