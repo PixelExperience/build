@@ -3,7 +3,7 @@
 print_build_config_vars := \
   PLATFORM_VERSION_CODENAME \
   PLATFORM_VERSION \
-  LINEAGE_VERSION \
+  CUSTOM_VERSION \
   TARGET_PRODUCT \
   TARGET_BUILD_VARIANT \
   TARGET_BUILD_TYPE \
@@ -35,15 +35,6 @@ endif
 ifneq ($(RECOVERY_VARIANT),)
 print_build_config_vars += \
   RECOVERY_VARIANT
-endif
-
-ifeq ($(WITH_SU),true)
-print_build_config_vars += \
-  WITH_SU
-endif
-ifeq ($(WITH_GMS),true)
-print_build_config_vars += \
-  WITH_GMS
 endif
 
 ifeq ($(TARGET_BUILD_PDK),true)
