@@ -31,8 +31,8 @@ PRODUCT_FULL_TREBLE_OVERRIDE := true
 
 # The Messaging app:
 #   Needed for android.telecom.cts.ExtendedInCallServiceTest#testOnCannedTextResponsesLoaded
-PRODUCT_PACKAGES += \
-    messaging
+#PRODUCT_PACKAGES += \
+#    messaging
 
 # Telephony:
 #   Provide a default APN configuration
