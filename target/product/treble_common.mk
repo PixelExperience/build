@@ -28,8 +28,8 @@ PRODUCT_FULL_TREBLE_OVERRIDE := true
 
 # The Messaging app:
 #   Needed for android.telecom.cts.ExtendedInCallServiceTest#testOnCannedTextResponsesLoaded
-PRODUCT_PACKAGES += \
-    messaging
+#PRODUCT_PACKAGES += \
+#    messaging
 
 # The following policy XML files are used as fallback for
 # vendors/devices not using XML to configure audio policy.
