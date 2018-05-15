@@ -170,8 +170,7 @@ include $(BUILD_SYSTEM)/device.mk
 
 # A PixelExperience build needs only the specific product makefiles.
 ifneq ($(CUSTOM_BUILD),)
-  all_product_configs := $(shell find device -path "*/$(CUSTOM_BUILD)/aosp_$(CUSTOM_BUILD).mk")
-  all_product_configs += $(wildcard vendor/aosp/build/target/product/aosp_$(CUSTOM_BUILD).mk)
+  all_product_configs := $(shell find device -path "*/*/aosp_$(CUSTOM_BUILD).mk")
 else
   ifneq ($(strip $(TARGET_BUILD_APPS)),)
   # An unbundled app build needs only the core product makefiles.
