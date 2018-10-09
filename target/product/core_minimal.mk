@@ -133,8 +133,6 @@ endif
 
 # The order of PRODUCT_SYSTEM_SERVER_JARS matters.
 PRODUCT_SYSTEM_SERVER_JARS := \
-    org.lineageos.platform \
-    org.lineageos.hardware \
     services \
     ethernet-service \
     wifi-service \
