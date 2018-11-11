@@ -208,6 +208,10 @@ android
 org\.codeaurora\..*
 
 ###################################################
+# org.pixelexperience.keydisabler.jar
+org\.pixelexperience\.keydisabler\..*
+
+###################################################
 # apache-xml.jar
 org\.apache\.xml\.res
 org\.apache\.xml\.utils
