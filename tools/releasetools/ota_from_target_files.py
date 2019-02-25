@@ -823,7 +823,6 @@ else if get_stage("%(bcb_dev)s") == "3/3" then
   script.AppendExtra("ifelse(is_mounted(\"/system\"), unmount(\"/system\"));")
 
   android_version = target_info.GetBuildProp("ro.build.version.release")
-  build_id = target_info.GetBuildProp("ro.build.id")
   build_date = target_info.GetBuildProp("org.pixelexperience.build_date")
   device = target_info.GetBuildProp("org.pixelexperience.device")
 
@@ -832,7 +831,6 @@ else if get_stage("%(bcb_dev)s") == "3/3" then
   script.Print("               by jhenrique09");
   script.Print("----------------------------------------------");
   script.Print(" Android version: %s"%(android_version));
-  script.Print(" Build id: %s"%(build_id));
   script.Print(" Build date: %s"%(build_date));
   script.Print(" Device: %s"%(device));
   script.Print("----------------------------------------------");
