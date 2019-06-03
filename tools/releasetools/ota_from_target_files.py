@@ -830,6 +830,7 @@ else if get_stage("%(bcb_dev)s") == "3/3" then
 
   android_version = target_info.GetBuildProp("ro.build.version.release")
   build_date = target_info.GetBuildProp("org.pixelexperience.build_date")
+  security_patch = target_info.GetBuildProp("ro.build.version.security_patch")
   device = target_info.GetBuildProp("org.pixelexperience.device")
 
   script.Print("----------------------------------------------");
@@ -838,6 +839,7 @@ else if get_stage("%(bcb_dev)s") == "3/3" then
   script.Print("----------------------------------------------");
   script.Print(" Android version: %s"%(android_version));
   script.Print(" Build date: %s"%(build_date));
+  script.Print(" Security patch: %s"%(security_patch));
   script.Print(" Device: %s"%(device));
   script.Print("----------------------------------------------");
   device_specific.FullOTA_InstallBegin()
