@@ -50,6 +50,10 @@ ifneq (,$(findstring $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr/include,$(LOCAL_
   LOCAL_HEADER_LIBRARIES += generated_kernel_headers
 endif
 
+#CFLAGS tweaks 
+LOCAL_CFLAGS += -O3 -s 
+LOCAL_CPPFLAGS += -O3 -s
+
 # Remove KERNEL_OBJ/usr from any LOCAL_ADDITIONAL_DEPENDENCIES, we will
 # just include generated_kernel_headers which already has the proper
 # dependency
