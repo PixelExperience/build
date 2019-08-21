@@ -835,7 +835,7 @@ else if get_stage("%(bcb_dev)s") == "3/3" then
   device = target_info.GetBuildProp("org.pixelexperience.device")
 
   script.Print("----------------------------------------------");
-  script.Print("              Pixel Experience");
+  script.Print("        Pixel Experience (Plus edition)");
   script.Print("               by jhenrique09");
   script.Print("----------------------------------------------");
   script.Print(" Android version: %s"%(android_version));
