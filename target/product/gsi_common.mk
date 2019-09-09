@@ -20,8 +20,10 @@ $(call inherit-product, $(SRC_TARGET_DIR)/product/mainline_system.mk)
 $(call inherit-product, $(SRC_TARGET_DIR)/product/handheld_product.mk)
 $(call inherit-product, $(SRC_TARGET_DIR)/product/telephony_product.mk)
 
+ifeq ($(CUSTOM_BUILD),)
 # Default AOSP sounds
 $(call inherit-product-if-exists, frameworks/base/data/sounds/AllAudio.mk)
+endif
 
 # GSI doesn't support apex for now.
 # Properties set in product take precedence over those in vendor.
