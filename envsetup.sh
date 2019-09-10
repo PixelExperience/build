@@ -590,7 +590,6 @@ function add_lunch_combo()
 function print_lunch_menu()
 {
     local uname=$(uname)
-    local choices=$(TARGET_BUILD_APPS= get_build_var COMMON_LUNCH_CHOICES)
     echo
     echo "You're building on" $uname
     echo
@@ -598,7 +597,7 @@ function print_lunch_menu()
 
     local i=1
     local choice
-    for choice in $(echo $choices)
+    for choice in ${choices[@]}
     do
         echo "     $i. $choice"
         i=$(($i+1))
@@ -610,6 +609,19 @@ function print_lunch_menu()
 function lunch()
 {
     local answer
+
+    choices=()
+    for makefile_target in $(TARGET_BUILD_APPS= get_build_var COMMON_LUNCH_CHOICES)
+    do
+        choices+=($makefile_target)
+    done
+    for other_target in ${lunch_others_targets[@]}
+    do
+        if [[ " ${choices[*]} " != *"$other_target"* ]];
+        then
+            choices+=($other_target)
+        fi
+    done
 
     if [ "$1" ] ; then
         answer=$1
@@ -626,7 +638,6 @@ function lunch()
         selection=aosp_arm-eng
     elif (echo -n $answer | grep -q -e "^[0-9][0-9]*$")
     then
-        local choices=($(TARGET_BUILD_APPS= get_build_var COMMON_LUNCH_CHOICES))
         if [ $answer -le ${#choices[@]} ]
         then
             # array in zsh starts from 1 instead of 0.
