@@ -729,11 +729,23 @@ function lunch()
 
     if [ "$1" ]; then
         answer=$1
+        if (echo -n $answer | grep -q -e "^[0-9][0-9]*$")
+        then
+            echo
+            echo "Invalid lunch combo"
+            return 1
+        fi
     else
         print_lunch_menu
-        echo "Which would you like? [aosp_arm-eng]"
+        echo -n "Which would you like? "
         echo -n "Pick from common choices above (e.g. 13) or specify your own (e.g. aosp_barbet-eng): "
         read answer
+        if ! (echo -n $answer | grep -q -e "^[0-9][0-9]*$")
+        then
+            echo
+            echo "Invalid lunch combo"
+            return 1
+        fi
         used_lunch_menu=1
     fi
 
@@ -741,10 +753,12 @@ function lunch()
 
     if [ -z "$answer" ]
     then
-        selection=aosp_arm-eng
+        echo
+        echo "Invalid lunch combo"
+        return 1
     elif (echo -n $answer | grep -q -e "^[0-9][0-9]*$")
     then
-        if [ $answer -le ${#choices[@]} ]
+        if [ $answer -ge 1 ] && [ $answer -le ${#choices[@]} ]
         then
             # array in zsh starts from 1 instead of 0.
             if [ -n "$ZSH_VERSION" ]
@@ -753,6 +767,10 @@ function lunch()
             else
                 selection=${choices[$(($answer-1))]}
             fi
+        else
+            echo
+            echo "Invalid lunch combo"
+            return 1
         fi
     else
         selection=$answer
