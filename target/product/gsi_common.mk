@@ -25,6 +25,11 @@ ifeq ($(CUSTOM_BUILD),)
 $(call inherit-product-if-exists, frameworks/base/data/sounds/AllAudio.mk)
 endif
 
+# GSI doesn't support apex for now.
+# Properties set in product take precedence over those in vendor.
+PRODUCT_PRODUCT_PROPERTIES += \
+    ro.apex.updatable=false
+
 # The mainline checking whitelist, should be clean up
 PRODUCT_ARTIFACT_PATH_REQUIREMENT_WHITELIST += \
     system/app/messaging/messaging.apk \
