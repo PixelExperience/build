@@ -903,8 +903,6 @@ else if get_stage("%(bcb_dev)s") == "3/3" then
   else:
     system_mount_point = "/system"
 
-  script.AppendExtra("ifelse(is_mounted(\"{0}\"), unmount(\"{0}\"));".format(system_mount_point))
-
   android_version = target_info.GetBuildProp("ro.build.version.release")
   build_id = target_info.GetBuildProp("ro.build.id")
   build_date = target_info.GetBuildProp("org.pixelexperience.build_date")
