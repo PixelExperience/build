@@ -180,10 +180,6 @@ A/B OTA specific options
 
   --override_device <device>
       Override device-specific asserts. Can be a comma-separated list.
-
-  --backup <boolean>
-      Enable or disable the execution of backuptool.sh.
-      Disabled by default.
 """
 
 from __future__ import print_function
@@ -249,7 +245,7 @@ METADATA_NAME = 'META-INF/com/android/metadata'
 POSTINSTALL_CONFIG = 'META/postinstall_config.txt'
 DYNAMIC_PARTITION_INFO = 'META/dynamic_partitions_info.txt'
 AB_PARTITIONS = 'META/ab_partitions.txt'
-UNZIP_PATTERN = ['IMAGES/*', 'META/*', 'RADIO/*', 'INSTALL/*']
+UNZIP_PATTERN = ['IMAGES/*', 'META/*', 'RADIO/*']
 RETROFIT_DAP_UNZIP_PATTERN = ['OTA/super_*.img', AB_PARTITIONS]
 
 
@@ -811,15 +807,6 @@ def AddCompatibilityArchiveIfTrebleEnabled(target_zip, output_zip, target_info,
                           vendor_updated or odm_updated)
 
 
-def CopyInstallTools(output_zip):
-  install_path = os.path.join(OPTIONS.input_tmp, "INSTALL")
-  for root, subdirs, files in os.walk(install_path):
-     for f in files:
-      install_source = os.path.join(root, f)
-      install_target = os.path.join("install", os.path.relpath(root, install_path), f)
-      output_zip.write(install_source, install_target)
-
-
 def WriteFullOTAPackage(input_zip, output_file):
   target_info = BuildInfo(OPTIONS.info_dict, OPTIONS.oem_dicts)
 
@@ -936,23 +923,6 @@ else if get_stage("%(bcb_dev)s") == "3/3" then
   script.Print("----------------------------------------------");
   device_specific.FullOTA_InstallBegin()
 
-  CopyInstallTools(output_zip)
-  script.UnpackPackageDir("install", "/tmp/install")
-  script.SetPermissionsRecursive("/tmp/install", 0, 0, 0755, 0644, None, None)
-  script.SetPermissionsRecursive("/tmp/install/bin", 0, 0, 0755, 0755, None, None)
-
-  if OPTIONS.backuptool:
-    if is_system_as_root:
-      script.fstab["/system"].mount_point = system_mount_point
-    script.Mount("/system")
-    if is_system_as_root and common.system_as_system:
-      script.RunBackup("backup", "/system/system")
-    else:
-      script.RunBackup("backup", "/system")
-    script.Unmount(system_mount_point)
-    if is_system_as_root:
-      script.fstab["/system"].mount_point = "/"
-
   system_progress = 0.75
 
   if OPTIONS.wipe_user_data:
@@ -1009,19 +979,6 @@ else if get_stage("%(bcb_dev)s") == "3/3" then
   common.ZipWriteStr(output_zip, "boot.img", boot_img.data)
 
   device_specific.FullOTA_PostValidate()
-
-  if OPTIONS.backuptool:
-    script.ShowProgress(0.02, 10)
-    if is_system_as_root:
-      script.fstab["/system"].mount_point = system_mount_point
-    script.Mount("/system")
-    if is_system_as_root and common.system_as_system:
-      script.RunBackup("restore", "/system/system")
-    else:
-      script.RunBackup("restore", "/system")
-    script.Unmount(system_mount_point)
-    if is_system_as_root:
-      script.fstab["/system"].mount_point = "/"
 
   script.ShowProgress(0.05, 5)
   script.WriteRawImage("/boot", "boot.img")
