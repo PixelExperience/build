@@ -4288,7 +4288,7 @@ else
 endif
 
 ifneq ($(CUSTOM_BUILD),)
-    $(INTERNAL_OTA_PACKAGE_TARGET): backuptool := true
+    $(INTERNAL_OTA_PACKAGE_TARGET): backuptool := false
 else
     $(INTERNAL_OTA_PACKAGE_TARGET): backuptool := false
 endif
