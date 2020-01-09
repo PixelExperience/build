@@ -31,6 +31,14 @@ class EdifyGenerator(object):
     else:
       self.fstab = fstab
 
+  def MakeTemporary(self):
+    """Make a temporary script object whose commands can latter be
+    appended to the parent script with AppendScript().  Used when the
+    caller wants to generate script commands out-of-order."""
+    x = EdifyGenerator(self.version, self.info)
+    x.mounts = self.mounts
+    return x
+
   @property
   def required_cache(self):
     """Return the minimum cache size to apply the update."""
@@ -202,6 +210,22 @@ class EdifyGenerator(object):
             target=target, source=source,
             code=common.ErrorCode.BAD_PATCH_FILE)))
 
+  def Verify(self, filename):
+    """Check that the given file has one of the
+    given hashes (encoded in the filename)."""
+    self.script.append(
+        'apply_patch_check("{filename}") && '
+        'ui_print("    Verified.") || '
+        'ui_print("\\"{filename}\\" has unexpected contents.");'.format(
+            filename=filename))
+
+  def FileCheck(self, filename, *sha1):
+    """Check that the given file has one of the
+    given *sha1 hashes."""
+    self.script.append('assert(sha1_check(read_file("%s")' % (filename,) +
+                       "".join([', "%s"' % (i,) for i in sha1]) +
+                       '));')
+
   def CacheFreeSpaceCheck(self, amount):
     """Check that there's at least 'amount' space that can be made
     available on /cache."""
@@ -288,6 +312,51 @@ class EdifyGenerator(object):
 
     self.script.append('wipe_block_device("%s", %s);' % (device, size))
 
+  def DeleteFiles(self, file_list):
+    """Delete all files in file_list."""
+    if not file_list:
+      return
+    cmd = "delete(" + ",\0".join(['"%s"' % (i,) for i in file_list]) + ");"
+    self.script.append(self.WordWrap(cmd))
+
+  def DeleteFilesIfNotMatching(self, file_list):
+    """Delete the file in file_list if not matching the checksum."""
+    if not file_list:
+      return
+    for name, sha1 in file_list:
+      cmd = ('sha1_check(read_file("{name}"), "{sha1}") || '
+             'delete("{name}");'.format(name=name, sha1=sha1))
+      self.script.append(self.WordWrap(cmd))
+
+  def RenameFile(self, srcfile, tgtfile):
+    """Moves a file from one location to another."""
+    if self.info.get("update_rename_support", False):
+      self.script.append('rename("%s", "%s");' % (srcfile, tgtfile))
+    else:
+      raise ValueError("Rename not supported by update binary")
+
+  def SkipNextActionIfTargetExists(self, tgtfile, tgtsha1):
+    """Prepend an action with an apply_patch_check in order to
+       skip the action if the file exists.  Used when a patch
+       is later renamed."""
+    cmd = ('sha1_check(read_file("%s"), %s) ||' % (tgtfile, tgtsha1))
+    self.script.append(self.WordWrap(cmd))
+
+  def ApplyPatchIncrementalUpdate(self, srcfile, tgtfile, tgtsize, tgtsha1, *patchpairs):
+    """Apply binary patches (in *patchpairs) to the given srcfile to
+    produce tgtfile (which may be "-" to indicate overwriting the
+    source file."""
+    if len(patchpairs) % 2 != 0 or len(patchpairs) == 0:
+      raise ValueError("bad patches given to ApplyPatch")
+    cmd = ['apply_patch("%s",\0"%s",\0%s,\0%d'
+           % (srcfile, tgtfile, tgtsha1, tgtsize)]
+    for i in range(0, len(patchpairs), 2):
+      cmd.append(',\0%s,\0package_extract_file("%s")' % patchpairs[i:i+2])
+    cmd.append(') ||\n    abort("E%d: Failed to apply patch to %s");' % (
+        common.ErrorCode.APPLY_PATCH_FAILURE, srcfile))
+    cmd_str = "".join(cmd)
+    self.script.append(self.WordWrap(cmd_str))
+
   def ApplyPatch(self, srcfile, tgtfile, tgtsize, tgtsha1, *patchpairs):
     """Apply binary patches (in *patchpairs) to the given srcfile to
     produce tgtfile (which may be "-" to indicate overwriting the
@@ -366,6 +435,48 @@ class EdifyGenerator(object):
       else:
         raise ValueError(
             "don't know how to write \"%s\" partitions" % p.fs_type)
+
+  def SetPermissions(self, fn, uid, gid, mode, selabel, capabilities):
+    """Set file ownership and permissions."""
+    if not self.info.get("use_set_metadata", False):
+      self.script.append('set_perm(%d, %d, 0%o, "%s");' % (uid, gid, mode, fn))
+    else:
+      if capabilities is None:
+        capabilities = "0x0"
+      cmd = 'set_metadata("%s", "uid", %d, "gid", %d, "mode", 0%o, ' \
+          '"capabilities", %s' % (fn, uid, gid, mode, capabilities)
+      if selabel is not None:
+        cmd += ', "selabel", "%s"' % selabel
+      cmd += ');'
+      self.script.append(cmd)
+
+  def SetPermissionsRecursive(self, fn, uid, gid, dmode, fmode, selabel,
+                              capabilities):
+    """Recursively set path ownership and permissions."""
+    if not self.info.get("use_set_metadata", False):
+      self.script.append('set_perm_recursive(%d, %d, 0%o, 0%o, "%s");'
+                         % (uid, gid, dmode, fmode, fn))
+    else:
+      if capabilities is None:
+        capabilities = "0x0"
+      cmd = 'set_metadata_recursive("%s", "uid", %d, "gid", %d, ' \
+          '"dmode", 0%o, "fmode", 0%o, "capabilities", %s' \
+          % (fn, uid, gid, dmode, fmode, capabilities)
+      if selabel is not None:
+        cmd += ', "selabel", "%s"' % selabel
+      cmd += ');'
+      self.script.append(cmd)
+
+  def MakeSymlinks(self, symlink_list):
+    """Create symlinks, given a list of (dest, link) pairs."""
+    by_dest = {}
+    for d, l in symlink_list:
+      by_dest.setdefault(d, []).append(l)
+
+    for dest, links in sorted(by_dest.iteritems()):
+      cmd = ('symlink("%s", ' % (dest,) +
+             ",\0".join(['"' + i + '"' for i in sorted(links)]) + ");")
+      self.script.append(self.WordWrap(cmd))
 
   def AppendExtra(self, extra):
     """Append text verbatim to the output script."""
