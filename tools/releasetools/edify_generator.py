@@ -211,6 +211,30 @@ class EdifyGenerator(object):
                             amount,
                             common.ErrorCode.INSUFFICIENT_CACHE_SPACE))
 
+  def MountRo(self, mount_point, mount_options_by_format=""):
+    """Mount the partition with the given mount_point.
+      mount_options_by_format:
+      [fs_type=option[,option]...[|fs_type=option[,option]...]...]
+      where option is optname[=optvalue]
+      E.g. ext4=barrier=1,nodelalloc,errors=panic|f2fs=errors=recover
+    """
+    fstab = self.fstab
+    if fstab:
+      p = fstab[mount_point]
+      mount_dict = {}
+      if mount_options_by_format is not None:
+        for option in mount_options_by_format.split("|"):
+          if "=" in option:
+            key, value = option.split("=", 1)
+            mount_dict[key] = value
+      mount_flags = mount_dict.get(p.fs_type, "")
+      if p.context is not None:
+        mount_flags = p.context + ("," + mount_flags if mount_flags else "")
+      self.script.append('mount_ro("%s", "%s", "%s", "%s", "%s");' % (
+          p.fs_type, common.PARTITION_TYPES[p.fs_type], p.device,
+          p.mount_point, mount_flags))
+      self.mounts.add(p.mount_point)
+
   def Mount(self, mount_point, mount_options_by_format=""):
     """Mount the partition with the given mount_point.
       mount_options_by_format:
