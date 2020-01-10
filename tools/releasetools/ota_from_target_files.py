@@ -400,6 +400,11 @@ class BuildInfo(object):
     recovery_mount_options = self.info_dict.get("recovery_mount_options")
     script.Mount("/oem", recovery_mount_options)
 
+  def WriteMountRoPartitionScript(self, script, partition):
+    assert self.oem_props is not None
+    recovery_mount_options = self.info_dict.get("recovery_mount_options")
+    script.MountRo("/"+partition, recovery_mount_options)
+
   def WriteDeviceAssertions(self, script, oem_no_mount):
     # Read the property directly if not using OEM properties.
     if not self.oem_props:
@@ -1682,10 +1687,6 @@ else if get_stage("%(bcb_dev)s") != "3/3" then
     # Stage 1/3: (a) Verify the current system.
     script.Comment("Stage 1/3")
 
-  # Dump fingerprints
-  script.Print("Source: {}".format(source_info.fingerprint))
-  script.Print("Target: {}".format(target_info.fingerprint))
-
   android_version = target_info.GetBuildProp("ro.build.version.release")
   device = target_info.GetBuildProp("org.pixelexperience.device")
 
@@ -1716,7 +1717,7 @@ else if get_stage("%(bcb_dev)s") != "3/3" then
   script.Print("----------------------------------------------");
 
   script.Print("Verifying current system...")
-
+  target_info.WriteMountRoPartitionScript(script, "system")
   device_specific.IncrementalOTA_VerifyBegin()
 
   # Check the required cache size (i.e. stashed blocks).
