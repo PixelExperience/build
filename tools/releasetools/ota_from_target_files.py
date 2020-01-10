@@ -400,6 +400,10 @@ class BuildInfo(object):
     recovery_mount_options = self.info_dict.get("recovery_mount_options")
     script.Mount("/oem", recovery_mount_options)
 
+  def WriteMountRoPartitionScript(self, script, partition):
+    recovery_mount_options = self.info_dict.get("recovery_mount_options")
+    script.MountRo("/"+partition, recovery_mount_options)
+
   def WriteDeviceAssertions(self, script, oem_no_mount):
     # Read the property directly if not using OEM properties.
     if not self.oem_props:
@@ -1682,10 +1686,6 @@ else if get_stage("%(bcb_dev)s") != "3/3" then
     # Stage 1/3: (a) Verify the current system.
     script.Comment("Stage 1/3")
 
-  # Dump fingerprints
-  script.Print("Source: {}".format(source_info.fingerprint))
-  script.Print("Target: {}".format(target_info.fingerprint))
-
   android_version = target_info.GetBuildProp("ro.build.version.release")
   device = target_info.GetBuildProp("org.pixelexperience.device")
 
@@ -1716,7 +1716,10 @@ else if get_stage("%(bcb_dev)s") != "3/3" then
   script.Print("----------------------------------------------");
 
   script.Print("Verifying current system...")
-
+  script.UnmountAll()
+  target_info.WriteMountRoPartitionScript(script, "system")
+  if HasVendorPartition(target_zip):
+    target_info.WriteMountRoPartitionScript(script, "vendor")
   device_specific.IncrementalOTA_VerifyBegin()
 
   # Check the required cache size (i.e. stashed blocks).
@@ -1809,6 +1812,7 @@ endif;
 """ % bcb_dev)
 
   script.SetProgress(1)
+  script.UnmountAll()
   # For downgrade OTAs, we prefer to use the update-binary in the source
   # build that is actually newer than the one in the target build.
   if OPTIONS.downgrade:
