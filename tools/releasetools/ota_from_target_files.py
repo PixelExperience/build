@@ -1003,6 +1003,13 @@ else if get_stage("%(bcb_dev)s") == "3/3" then
                              progress=progress_dict.get(block_diff.partition),
                              write_verify_script=OPTIONS.verify)
 
+  if OPTIONS.target_info_dict.get("use_dynamic_partitions") != "true" and OPTIONS.info_dict.get("ab_update") != "true"
+    recovery_img = common.GetBootableImage(
+        "recovery.img", "recovery.img", OPTIONS.input_tmp, "RECOVERY")
+    common.CheckSize(recovery_img.data, "recovery.img", target_info)
+    common.ZipWriteStr(output_zip, "recovery.img", recovery_img.data)
+    script.WriteRawImage("/recovery", "recovery.img")
+
   boot_img = common.GetBootableImage(
       "boot.img", "boot.img", OPTIONS.input_tmp, "BOOT")
   common.CheckSize(boot_img.data, "boot.img", target_info)
