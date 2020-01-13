@@ -926,6 +926,10 @@ else if get_stage("%(bcb_dev)s") == "3/3" then
   build_date = target_info.GetBuildProp("org.pixelexperience.build_date")
   security_patch = target_info.GetBuildProp("ro.build.version.security_patch")
   device = target_info.GetBuildProp("org.pixelexperience.device")
+  try:
+    should_update_recovery = target_info.GetBuildProp("persist.sys.recovery_update") == "true"
+  except:
+    should_update_recovery = False
 
   script.Print("----------------------------------------------");
   script.Print("              Pixel Experience");
@@ -1002,6 +1006,13 @@ else if get_stage("%(bcb_dev)s") == "3/3" then
       block_diff.WriteScript(script, output_zip,
                              progress=progress_dict.get(block_diff.partition),
                              write_verify_script=OPTIONS.verify)
+
+  if should_update_recovery and OPTIONS.target_info_dict.get("use_dynamic_partitions") != "true" and OPTIONS.info_dict.get("ab_update") != "true":
+    recovery_img = common.GetBootableImage(
+        "recovery.img", "recovery.img", OPTIONS.input_tmp, "RECOVERY")
+    common.CheckSize(recovery_img.data, "recovery.img", target_info)
+    common.ZipWriteStr(output_zip, "recovery.img", recovery_img.data)
+    script.WriteRawImage("/recovery", "recovery.img")
 
   boot_img = common.GetBootableImage(
       "boot.img", "boot.img", OPTIONS.input_tmp, "BOOT")
