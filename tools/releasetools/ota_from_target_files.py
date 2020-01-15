@@ -469,9 +469,8 @@ class Item(object):
         for i in item.children:
           recurse(i, current)
       else:
-        if item.name in OPTIONS.incremental_blacklisted_files:
-          continue
-        if item.uid != current[0] or item.gid != current[1] or \
+        if item.name not in OPTIONS.incremental_blacklisted_files \
+               item.uid != current[0] or item.gid != current[1] or \
                item.mode != current[3] or item.selabel != current[4] or \
                item.capabilities != current[5]:
           script.SetPermissions(item_path, item.uid, item.gid,
