@@ -224,6 +224,7 @@ OPTIONS.two_step = False
 OPTIONS.include_secondary = False
 OPTIONS.no_signing = False
 OPTIONS.incremental_block_based = False
+OPTIONS.incremental_blacklisted_files = ['system/recovery-from-boot.p', 'system/bin/install-recovery.sh']
 OPTIONS.block_based = True
 OPTIONS.updater_binary = None
 OPTIONS.oem_source = None
@@ -468,6 +469,8 @@ class Item(object):
         for i in item.children:
           recurse(i, current)
       else:
+        if item.name in OPTIONS.incremental_blacklisted_files:
+          continue
         if item.uid != current[0] or item.gid != current[1] or \
                item.mode != current[3] or item.selabel != current[4] or \
                item.capabilities != current[5]:
@@ -578,6 +581,8 @@ class FileDifference(object):
         renames[sf.name] = tf
 
       if sf is None or tf.sha1 != sf.sha1:
+        if tf.name in OPTIONS.incremental_blacklisted_files:
+          continue
         partition_prefix = partition + "/"
         zip_file_name = partition_prefix.upper() + tf.name[len(partition_prefix):]
         d = target_zip.read(zip_file_name)
