@@ -587,7 +587,7 @@ class FileDifference(object):
         pass
 
   def EmitVerification(self, script, package_download_url):
-    error_msg = "You can\'t upgrade to this version, please download full package in " + package_download_url
+    error_msg = "Failed to apply update, please download full package in " + package_download_url
     for tf, sf, _, _ in self.patch_list:
       sf.name = FixUpPartitionPath("/" + sf.name)
       script.FileCheck(sf.name, sf.sha1, error_msg)
@@ -2649,23 +2649,30 @@ def WriteIncrementalOTAPackage(target_zip, source_zip, output_file):
 
   script.Comment("---- start making verification here ----")
 
+  original_fstab = script.fstab
+
   script.CheckAndUnmount("/")
   script.CheckAndUnmount("/system_root")
   script.CheckAndUnmount("/system")
   script.CheckAndUnmount("/mnt/system")
+  script.CheckAndUnmount("/mnt/")
+
   script.fstab["/system"].mount_point = "/mnt/system"
+  script.MakedirRecursive("/mnt/system")
   script.Mount("/system")
 
   if HasVendorPartition(target_zip):
     script.CheckAndUnmount("/vendor")
     script.CheckAndUnmount("/mnt/vendor")
     script.fstab["/vendor"].mount_point = "/mnt/vendor"
+    script.MakedirRecursive("/mnt/vendor")
     script.Mount("/vendor")
 
   if HasProductPartition(target_zip):
     script.CheckAndUnmount("/product")
     script.CheckAndUnmount("/mnt/product")
     script.fstab["/product"].mount_point = "/mnt/product"
+    script.MakedirRecursive("/mnt/product")
     script.Mount("/product")
 
   root_diff.EmitVerification(script, package_download_url)
@@ -2807,6 +2814,12 @@ def WriteIncrementalOTAPackage(target_zip, source_zip, output_file):
   # permissions.
   script.AppendScript(temp_script)
 
+  # Unmount
+  script.UnmountAll()
+
+  # Restore system mount point
+  script.fstab = original_fstab
+
   # Do device-specific installation (eg, write radio image).
   device_specific.IncrementalOTA_InstallEnd()
 
@@ -2814,8 +2827,6 @@ def WriteIncrementalOTAPackage(target_zip, source_zip, output_file):
     script.AppendExtra(OPTIONS.extra_script)
 
   script.SetProgress(1)
-
-  script.UnmountAll()
 
   script.AddToZip(target_zip, output_zip, input_path=OPTIONS.updater_binary)
   metadata["ota-required-cache"] = str(script.required_cache)

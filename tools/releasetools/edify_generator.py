@@ -254,6 +254,10 @@ class EdifyGenerator(object):
       self.mounts.remove(mount_point)
       self.script.append('unmount("%s");' % (mount_point,))
 
+  def MakedirRecursive(self, path):
+    """Create all parent directories of name, if necessary"""
+    self.script.append('mkdir_recursive("%s");' % (path))
+
   def UnpackPackageDir(self, src, dst):
     """Unpack a given directory from the OTA package into the given
     destination directory."""
