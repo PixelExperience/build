@@ -533,15 +533,13 @@ def FixUpPartitionPath(path):
     path = path[1:]
     preprend_bar = True
   if path == 'root':
-    path = "mnt/system"
+    path = "system"
   elif path == 'system':
-    path = "mnt/system/system"
+    path = "system/system"
   elif path.startswith('root/'):
-    path = "mnt/system/" + path[5:]
+    path = "system/" + path[5:]
   elif path.startswith('system/'):
-    path = "mnt/system/system/" + path[7:]
-  else:
-    path = "mnt/" + path
+    path = "system/system/" + path[7:]
   if preprend_bar:
     path = "/" + path
   return path
@@ -2652,20 +2650,18 @@ def WriteIncrementalOTAPackage(target_zip, source_zip, output_file):
   script.CheckAndUnmount("/")
   script.CheckAndUnmount("/system_root")
   script.CheckAndUnmount("/system")
-  script.CheckAndUnmount("/mnt/system")
-  script.fstab["/system"].mount_point = "/mnt/system"
+
+  original_system_mount_point = script.fstab["/system"].mount_point
+
+  script.fstab["/system"].mount_point = "/system"
   script.Mount("/system")
 
   if HasVendorPartition(target_zip):
     script.CheckAndUnmount("/vendor")
-    script.CheckAndUnmount("/mnt/vendor")
-    script.fstab["/vendor"].mount_point = "/mnt/vendor"
     script.Mount("/vendor")
 
   if HasProductPartition(target_zip):
     script.CheckAndUnmount("/product")
-    script.CheckAndUnmount("/mnt/product")
-    script.fstab["/product"].mount_point = "/mnt/product"
     script.Mount("/product")
 
   root_diff.EmitVerification(script, package_download_url)
@@ -2776,12 +2772,12 @@ def WriteIncrementalOTAPackage(target_zip, source_zip, output_file):
   script.DeleteFiles(always_delete)
   script.DeleteFilesIfNotMatching(may_delete)
 
-  script.UnpackPackageDir("root", "/mnt/system")
-  script.UnpackPackageDir("system", "/mnt/system/system")
+  script.UnpackPackageDir("root", "/system")
+  script.UnpackPackageDir("system", "/system/system")
   if vendor_diff:
-    script.UnpackPackageDir("vendor", "/mnt/vendor")
+    script.UnpackPackageDir("vendor", "/vendor")
   if product_diff:
-    script.UnpackPackageDir("product", "/mnt/product")
+    script.UnpackPackageDir("product", "/product")
 
   root_diff.EmitRenames(script)
   system_diff.EmitRenames(script)
@@ -2807,6 +2803,12 @@ def WriteIncrementalOTAPackage(target_zip, source_zip, output_file):
   # permissions.
   script.AppendScript(temp_script)
 
+  # Unmount
+  script.UnmountAll()
+
+  # Restore system mount point
+  script.fstab["/system"].mount_point = original_system_mount_point
+
   # Do device-specific installation (eg, write radio image).
   device_specific.IncrementalOTA_InstallEnd()
 
@@ -2814,8 +2816,6 @@ def WriteIncrementalOTAPackage(target_zip, source_zip, output_file):
     script.AppendExtra(OPTIONS.extra_script)
 
   script.SetProgress(1)
-
-  script.UnmountAll()
 
   script.AddToZip(target_zip, output_zip, input_path=OPTIONS.updater_binary)
   metadata["ota-required-cache"] = str(script.required_cache)
