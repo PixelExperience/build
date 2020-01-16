@@ -527,21 +527,25 @@ def LoadPartitionFiles(z, partition):
       out[fn] = common.File(fn, data, info.compress_size)
   return out
 
+def GetSystemBasePath():
+  if OPTIONS.target_info_dict.get("system_root_image") == "true":
+    return "system_root"
+  else:
+    return "system"
+
 def FixUpPartitionPath(path):
   preprend_bar = False
   if path.startswith('/'):
     path = path[1:]
     preprend_bar = True
   if path == 'root':
-    path = "mnt/system"
+    path = GetSystemBasePath()
   elif path == 'system':
-    path = "mnt/system/system"
+    path = GetSystemBasePath() + "/system"
   elif path.startswith('root/'):
-    path = "mnt/system/" + path[5:]
+    path = GetSystemBasePath() + "/" + path[5:]
   elif path.startswith('system/'):
-    path = "mnt/system/system/" + path[7:]
-  else:
-    path = "mnt/" + path
+    path = GetSystemBasePath() + "/system/" + path[7:]
   if preprend_bar:
     path = "/" + path
   return path
@@ -587,7 +591,7 @@ class FileDifference(object):
         pass
 
   def EmitVerification(self, script, package_download_url):
-    error_msg = "You can\'t upgrade to this version, please download full package in " + package_download_url
+    error_msg = "Failed to apply update, please download full package at " + package_download_url
     for tf, sf, _, _ in self.patch_list:
       sf.name = FixUpPartitionPath("/" + sf.name)
       script.FileCheck(sf.name, sf.sha1, error_msg)
@@ -2649,23 +2653,17 @@ def WriteIncrementalOTAPackage(target_zip, source_zip, output_file):
 
   script.Comment("---- start making verification here ----")
 
-  script.CheckAndUnmount("/")
-  script.CheckAndUnmount("/system_root")
-  script.CheckAndUnmount("/system")
-  script.CheckAndUnmount("/mnt/system")
-  script.fstab["/system"].mount_point = "/mnt/system"
+  script.CheckAndUnmount("/" + GetSystemBasePath())
+
+  script.fstab["/system"].mount_point = "/" + GetSystemBasePath()
   script.Mount("/system")
 
   if HasVendorPartition(target_zip):
     script.CheckAndUnmount("/vendor")
-    script.CheckAndUnmount("/mnt/vendor")
-    script.fstab["/vendor"].mount_point = "/mnt/vendor"
     script.Mount("/vendor")
 
   if HasProductPartition(target_zip):
     script.CheckAndUnmount("/product")
-    script.CheckAndUnmount("/mnt/product")
-    script.fstab["/product"].mount_point = "/mnt/product"
     script.Mount("/product")
 
   root_diff.EmitVerification(script, package_download_url)
@@ -2776,12 +2774,12 @@ def WriteIncrementalOTAPackage(target_zip, source_zip, output_file):
   script.DeleteFiles(always_delete)
   script.DeleteFilesIfNotMatching(may_delete)
 
-  script.UnpackPackageDir("root", "/mnt/system")
-  script.UnpackPackageDir("system", "/mnt/system/system")
+  script.UnpackPackageDir("root", "/" + GetSystemBasePath())
+  script.UnpackPackageDir("system", "/" + GetSystemBasePath() + "/system")
   if vendor_diff:
-    script.UnpackPackageDir("vendor", "/mnt/vendor")
+    script.UnpackPackageDir("vendor", "/vendor")
   if product_diff:
-    script.UnpackPackageDir("product", "/mnt/product")
+    script.UnpackPackageDir("product", "/product")
 
   root_diff.EmitRenames(script)
   system_diff.EmitRenames(script)
@@ -2807,6 +2805,9 @@ def WriteIncrementalOTAPackage(target_zip, source_zip, output_file):
   # permissions.
   script.AppendScript(temp_script)
 
+  # Unmount
+  script.UnmountAll()
+
   # Do device-specific installation (eg, write radio image).
   device_specific.IncrementalOTA_InstallEnd()
 
@@ -2814,8 +2815,6 @@ def WriteIncrementalOTAPackage(target_zip, source_zip, output_file):
     script.AppendExtra(OPTIONS.extra_script)
 
   script.SetProgress(1)
-
-  script.UnmountAll()
 
   script.AddToZip(target_zip, output_zip, input_path=OPTIONS.updater_binary)
   metadata["ota-required-cache"] = str(script.required_cache)
