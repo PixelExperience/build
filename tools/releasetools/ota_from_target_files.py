@@ -181,6 +181,10 @@ A/B OTA specific options
   --override_device <device>
       Override device-specific asserts. Can be a comma-separated list.
 
+  --incremental_block_based <boolean>
+      Enable block based incremental updates
+      Disabled by default.
+
   --backup <boolean>
       Enable or disable the execution of backuptool.sh.
       Disabled by default.
@@ -2899,6 +2903,8 @@ def main(argv):
       OPTIONS.output_metadata_path = a
     elif o in ("--override_device"):
       OPTIONS.override_device = a
+    elif o in ("--incremental_block_based"):
+      OPTIONS.incremental_block_based = bool(a.lower() == 'true')
     elif o in ("--backup"):
       OPTIONS.backuptool = bool(a.lower() == 'true')
     else:
@@ -2936,6 +2942,7 @@ def main(argv):
                                  "skip_compatibility_check",
                                  "output_metadata_path=",
                                  "override_device=",
+                                 "incremental_block_based=",
                                  "backup=",
                              ], extra_option_handler=option_handler)
 
@@ -3001,7 +3008,6 @@ def main(argv):
     OPTIONS.skip_postinstall = True
 
   ab_update = OPTIONS.info_dict.get("ab_update") == "true"
-  dynamic_partitions = OPTIONS.info_dict.get("use_dynamic_partitions") == "true"
 
   # Use the default key to sign the package if not specified with package_key.
   # package_keys are needed on ab_updates, so always define them if an
@@ -3075,9 +3081,7 @@ def main(argv):
         OPTIONS.incremental_source, UNZIP_PATTERN)
     with zipfile.ZipFile(args[0], 'r') as input_zip, \
         zipfile.ZipFile(OPTIONS.incremental_source, 'r') as source_zip:
-      if dynamic_partitions:
-        raise RuntimeError("can't generate incremental with dynamic partitions")
-      elif OPTIONS.incremental_block_based:
+      if OPTIONS.incremental_block_based:
         WriteBlockIncrementalOTAPackage(
             input_zip,
             source_zip,
