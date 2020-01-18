@@ -181,6 +181,10 @@ A/B OTA specific options
   --override_device <device>
       Override device-specific asserts. Can be a comma-separated list.
 
+  --incremental_block_based <boolean>
+      Enable block based incremental updates
+      Disabled by default.
+
   --backup <boolean>
       Enable or disable the execution of backuptool.sh.
       Disabled by default.
@@ -223,8 +227,6 @@ if OPTIONS.worker_threads == 0:
 OPTIONS.two_step = False
 OPTIONS.include_secondary = False
 OPTIONS.no_signing = False
-OPTIONS.incremental_block_based = False
-OPTIONS.incremental_blacklisted_files = ['system/recovery-from-boot.p', 'system/bin/install-recovery.sh', 'system/etc/recovery-resource.dat']
 OPTIONS.block_based = True
 OPTIONS.updater_binary = None
 OPTIONS.oem_source = None
@@ -245,6 +247,8 @@ OPTIONS.retrofit_dynamic_partitions = False
 OPTIONS.skip_compatibility_check = False
 OPTIONS.output_metadata_path = None
 OPTIONS.override_device = 'auto'
+OPTIONS.block_based_incremental = False
+OPTIONS.incremental_blacklisted_files = ['system/recovery-from-boot.p', 'system/bin/install-recovery.sh', 'system/etc/recovery-resource.dat']
 OPTIONS.backuptool = False
 
 
@@ -1499,7 +1503,7 @@ def GetPackageMetadata(target_info, source_info=None):
     metadata['ota-required-cache'] = '0'
   else:
     if is_incremental:
-      if OPTIONS.incremental_block_based:
+      if OPTIONS.block_based_incremental:
         metadata['ota-type'] = 'BLOCK'
       else:
         metadata['ota-type'] = 'FILE'
@@ -1942,8 +1946,6 @@ def WriteBlockIncrementalOTAPackage(target_zip, source_zip, output_file):
       "/tmp/boot.img", "boot.img", OPTIONS.source_tmp, "BOOT", source_info)
   target_boot = common.GetBootableImage(
       "/tmp/boot.img", "boot.img", OPTIONS.target_tmp, "BOOT", target_info)
-  updating_boot = (not OPTIONS.two_step and
-                   (source_boot.data != target_boot.data))
 
   target_recovery = common.GetBootableImage(
       "/tmp/recovery.img", "recovery.img", OPTIONS.target_tmp, "RECOVERY")
@@ -2064,11 +2066,38 @@ else if get_stage("%(bcb_dev)s") != "3/3" then
   script.Print("Source: {}".format(source_info.fingerprint))
   script.Print("Target: {}".format(target_info.fingerprint))
 
+  android_version = target_info.GetBuildProp("ro.build.version.release")
+  device = target_info.GetBuildProp("org.pixelexperience.device")
+
+  prev_build_id = source_info.GetBuildProp("ro.build.id")
+  build_id = target_info.GetBuildProp("ro.build.id")
+
+  prev_build_date = source_info.GetBuildProp("org.pixelexperience.build_date")
+  build_date = target_info.GetBuildProp("org.pixelexperience.build_date")
+
+  prev_security_patch = source_info.GetBuildProp("ro.build.version.security_patch")
+  security_patch = target_info.GetBuildProp("ro.build.version.security_patch")
+
+  script.Print("----------------------------------------------");
+  script.Print("              Pixel Experience");
+  script.Print("               by jhenrique09");
+  script.Print("----------------------------------------------");
+  script.Print(" Android version: %s"%(android_version));
+  if prev_build_id != build_id:
+    script.Print(" Build id: %s -> %s"%(prev_build_id, build_id));
+  else:
+    script.Print(" Build id: %s"%(build_id));
+  script.Print(" Build date: %s -> %s"%(prev_build_date, build_date));
+  if prev_security_patch != security_patch:
+    script.Print(" Security patch: %s -> %s"%(prev_security_patch, security_patch));
+  else:
+    script.Print(" Security patch: %s"%(security_patch));
+  script.Print(" Device: %s"%(device));
+  script.Print("----------------------------------------------");
+
   script.Print("Verifying current system...")
 
   device_specific.IncrementalOTA_VerifyBegin()
-
-  WriteFingerprintAssertion(script, target_info, source_info)
 
   # Check the required cache size (i.e. stashed blocks).
   size = []
@@ -2077,29 +2106,7 @@ else if get_stage("%(bcb_dev)s") != "3/3" then
   if vendor_diff:
     size.append(vendor_diff.required_cache)
 
-  if updating_boot:
-    boot_type, boot_device = common.GetTypeAndDevice("/boot", source_info)
-    d = common.Difference(target_boot, source_boot)
-    _, _, d = d.ComputePatch()
-    if d is None:
-      include_full_boot = True
-      common.ZipWriteStr(output_zip, "boot.img", target_boot.data)
-    else:
-      include_full_boot = False
-
-      logger.info(
-          "boot      target: %d  source: %d  diff: %d", target_boot.size,
-          source_boot.size, len(d))
-
-      common.ZipWriteStr(output_zip, "boot.img.p", d)
-
-      script.PatchPartitionCheck(
-          "{}:{}:{}:{}".format(
-              boot_type, boot_device, target_boot.size, target_boot.sha1),
-          "{}:{}:{}:{}".format(
-              boot_type, boot_device, source_boot.size, source_boot.sha1))
-
-      size.append(target_boot.size)
+  common.ZipWriteStr(output_zip, "boot.img", target_boot.data)
 
   if size:
     script.CacheFreeSpaceCheck(max(size))
@@ -2161,32 +2168,8 @@ else
                              progress=progress_dict.get(block_diff.partition),
                              write_verify_script=OPTIONS.verify)
 
-  if OPTIONS.two_step:
-    common.ZipWriteStr(output_zip, "boot.img", target_boot.data)
-    script.WriteRawImage("/boot", "boot.img")
-    logger.info("writing full boot image (forced by two-step mode)")
-
-  if not OPTIONS.two_step:
-    if updating_boot:
-      if include_full_boot:
-        logger.info("boot image changed; including full.")
-        script.Print("Installing boot image...")
-        script.WriteRawImage("/boot", "boot.img")
-      else:
-        # Produce the boot image by applying a patch to the current
-        # contents of the boot partition, and write it back to the
-        # partition.
-        logger.info("boot image changed; including patch.")
-        script.Print("Patching boot image...")
-        script.ShowProgress(0.1, 10)
-        script.PatchPartition(
-            '{}:{}:{}:{}'.format(
-                boot_type, boot_device, target_boot.size, target_boot.sha1),
-            '{}:{}:{}:{}'.format(
-                boot_type, boot_device, source_boot.size, source_boot.sha1),
-            'boot.img.p')
-    else:
-      logger.info("boot image unchanged; skipping.")
+  script.Print("Installing boot image...")
+  script.WriteRawImage("/boot", "boot.img")
 
   # Do device-specific installation (eg, write radio image).
   device_specific.IncrementalOTA_InstallEnd()
@@ -2899,6 +2882,8 @@ def main(argv):
       OPTIONS.output_metadata_path = a
     elif o in ("--override_device"):
       OPTIONS.override_device = a
+    elif o in ("--incremental_block_based"):
+      OPTIONS.block_based_incremental = bool(a.lower() == 'true')
     elif o in ("--backup"):
       OPTIONS.backuptool = bool(a.lower() == 'true')
     else:
@@ -2936,6 +2921,7 @@ def main(argv):
                                  "skip_compatibility_check",
                                  "output_metadata_path=",
                                  "override_device=",
+                                 "incremental_block_based=",
                                  "backup=",
                              ], extra_option_handler=option_handler)
 
@@ -3001,7 +2987,6 @@ def main(argv):
     OPTIONS.skip_postinstall = True
 
   ab_update = OPTIONS.info_dict.get("ab_update") == "true"
-  dynamic_partitions = OPTIONS.info_dict.get("use_dynamic_partitions") == "true"
 
   # Use the default key to sign the package if not specified with package_key.
   # package_keys are needed on ab_updates, so always define them if an
@@ -3075,9 +3060,7 @@ def main(argv):
         OPTIONS.incremental_source, UNZIP_PATTERN)
     with zipfile.ZipFile(args[0], 'r') as input_zip, \
         zipfile.ZipFile(OPTIONS.incremental_source, 'r') as source_zip:
-      if dynamic_partitions:
-        raise RuntimeError("can't generate incremental with dynamic partitions")
-      elif OPTIONS.incremental_block_based:
+      if OPTIONS.block_based_incremental:
         WriteBlockIncrementalOTAPackage(
             input_zip,
             source_zip,

@@ -4257,6 +4257,7 @@ PATH=$(foreach p,$(INTERNAL_USERIMAGES_BINARY_PATHS),$(p):)$$PATH MKBOOTIMG=$(MK
    --block \
    --extracted_input_target_files $(patsubst %.zip,%,$(BUILT_TARGET_FILES_PACKAGE)) \
    -p $(HOST_OUT) \
+   --incremental_block_based=$(block_based_incremental) \
    --backup=$(backuptool) \
    $(if $(OEM_OTA_CONFIG), -o $(OEM_OTA_CONFIG)) \
    $(2) \
@@ -4285,6 +4286,12 @@ ifeq ($(TARGET_OTA_ASSERT_DEVICE),)
     OTA_SCRIPT_OVERRIDE_DEVICE := auto
 else
     OTA_SCRIPT_OVERRIDE_DEVICE := $(TARGET_OTA_ASSERT_DEVICE)
+endif
+
+ifeq ($(TARGET_INCREMENTAL_BLOCK_BASED),true)
+    $(INTERNAL_OTA_PACKAGE_TARGET): block_based_incremental := true
+else
+    $(INTERNAL_OTA_PACKAGE_TARGET): block_based_incremental := false
 endif
 
 ifneq ($(CUSTOM_BUILD),)
