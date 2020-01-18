@@ -181,6 +181,10 @@ A/B OTA specific options
   --override_device <device>
       Override device-specific asserts. Can be a comma-separated list.
 
+  --block_based_incremental <boolean>
+      Enable block based incremental updates
+      Disabled by default.
+
   --backup <boolean>
       Enable or disable the execution of backuptool.sh.
       Disabled by default.
@@ -2899,6 +2903,8 @@ def main(argv):
       OPTIONS.output_metadata_path = a
     elif o in ("--override_device"):
       OPTIONS.override_device = a
+    elif o in ("--incremental_block_based"):
+      OPTIONS.incremental_block_based = bool(a.lower() == 'true')
     elif o in ("--backup"):
       OPTIONS.backuptool = bool(a.lower() == 'true')
     else:
@@ -2936,6 +2942,7 @@ def main(argv):
                                  "skip_compatibility_check",
                                  "output_metadata_path=",
                                  "override_device=",
+                                 "incremental_block_based=",
                                  "backup=",
                              ], extra_option_handler=option_handler)
 
