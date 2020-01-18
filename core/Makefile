@@ -4055,6 +4055,9 @@ endif
 ifeq ($(TARGET_NOT_USE_GZIP_RECOVERY_RAMDISK),true)
 	$(hide) echo "no_gzip_recovery_ramdisk=true" >> $(zip_root)/META/misc_info.txt
 endif
+ifeq ($(TARGET_INCREMENTAL_BLOCK_BASED),true)
+	$(hide) echo "use_incremental_block_based=true" >> $(zip_root)/META/misc_info.txt
+endif
 ifeq ($(BOARD_AVB_ENABLE),true)
 	$(hide) echo "avb_enable=true" >> $(zip_root)/META/misc_info.txt
 	$(hide) echo "avb_vbmeta_key_path=$(BOARD_AVB_KEY_PATH)" >> $(zip_root)/META/misc_info.txt
