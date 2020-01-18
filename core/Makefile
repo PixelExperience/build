@@ -3758,6 +3758,8 @@ endef
 
 # $(1): file
 define dump-dynamic-partitions-info
+  $(if $(filter true,$(TARGET_INCREMENTAL_BLOCK_BASED)), \
+    echo "use_incremental_block_based=true" >> $(1))
   $(if $(filter true,$(PRODUCT_USE_DYNAMIC_PARTITIONS)), \
     echo "use_dynamic_partitions=true" >> $(1))
   $(if $(filter true,$(PRODUCT_RETROFIT_DYNAMIC_PARTITIONS)), \
