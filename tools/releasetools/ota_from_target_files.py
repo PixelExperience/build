@@ -2095,6 +2095,11 @@ else if get_stage("%(bcb_dev)s") != "3/3" then
   script.Print(" Device: %s"%(device));
   script.Print("----------------------------------------------");
 
+  CopyInstallTools(output_zip)
+  script.UnpackPackageDir("install", "/tmp/install")
+  script.SetPermissionsRecursive("/tmp/install", 0, 0, 0755, 0644, None, None)
+  script.SetPermissionsRecursive("/tmp/install/bin", 0, 0, 0755, 0755, None, None)
+
   script.Print("Verifying current system...")
 
   device_specific.IncrementalOTA_VerifyBegin()
@@ -2627,6 +2632,11 @@ def WriteIncrementalOTAPackage(target_zip, source_zip, output_file):
     script.Print(" Security patch: %s"%(security_patch));
   script.Print(" Device: %s"%(device));
   script.Print("----------------------------------------------");
+
+  CopyInstallTools(output_zip)
+  script.UnpackPackageDir("install", "/tmp/install")
+  script.SetPermissionsRecursive("/tmp/install", 0, 0, 0755, 0644, None, None)
+  script.SetPermissionsRecursive("/tmp/install/bin", 0, 0, 0755, 0755, None, None)
 
   script.Print("Verifying current system...")
 
