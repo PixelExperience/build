@@ -1684,6 +1684,11 @@ else if get_stage("%(bcb_dev)s") != "3/3" then
   script.Print("Source: {}".format(source_info.fingerprint))
   script.Print("Target: {}".format(target_info.fingerprint))
 
+  CopyInstallTools(output_zip)
+  script.UnpackPackageDir("install", "/tmp/install")
+  script.SetPermissionsRecursive("/tmp/install", 0, 0, 0o755, 0o644, None, None)
+  script.SetPermissionsRecursive("/tmp/install/bin", 0, 0, 0o755, 0o755, None, None)
+
   script.Print("Verifying current system...")
 
   device_specific.IncrementalOTA_VerifyBegin()
@@ -1907,6 +1912,11 @@ def WriteFileIncrementalOTAPackage(target_zip, source_zip, output_file):
   # Dump fingerprints
   script.Print("Source: {}".format(source_info.fingerprint))
   script.Print("Target: {}".format(target_info.fingerprint))
+
+  CopyInstallTools(output_zip)
+  script.UnpackPackageDir("install", "/tmp/install")
+  script.SetPermissionsRecursive("/tmp/install", 0, 0, 0o755, 0o644, None, None)
+  script.SetPermissionsRecursive("/tmp/install/bin", 0, 0, 0o755, 0o755, None, None)
 
   device_specific.IncrementalOTA_VerifyBegin()
 
