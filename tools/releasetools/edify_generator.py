@@ -210,10 +210,10 @@ class EdifyGenerator(object):
             target=target, source=source,
             code=common.ErrorCode.BAD_PATCH_FILE)))
 
-  def FileCheck(self, filename, sha1, error_msg):
+  def IncrementalFileBasedSourceVersionCheck(self, prop_path, source_version_prop, source_version, error_msg):
     """Check that the given file has one of the
     given sha1 hashes."""
-    self.script.append('assert(sha1_check(read_file("%s"), "%s") || abort("%s"));' % (filename, sha1, error_msg))
+    self.script.append('assert(file_getprop("%s", "%s") == "%s" || abort("%s"));' % (prop_path, source_version_prop, source_version, error_msg))
 
   def CacheFreeSpaceCheck(self, amount):
     """Check that there's at least 'amount' space that can be made
