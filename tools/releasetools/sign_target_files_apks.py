@@ -395,9 +395,21 @@ def ProcessTargetFiles(input_tf_zip, output_tf_zip, misc_info,
        if GetApkFileInfo(i.filename, compressed_extension, [])[0]])
   system_root_image = misc_info.get("system_root_image") == "true"
 
+  prebuilt_vendor_image = misc_info.get("board_prebuilt_vendor_image") == "true"
+  prebuilt_odm_image = misc_info.get("board_prebuilt_odm_image") == "true"
+
   for info in input_tf_zip.infolist():
     filename = info.filename
-    if filename.startswith("IMAGES/"):
+
+    should_copy_vendor_image = (prebuilt_vendor_image and
+                                filename.startswith("IMAGES/") and
+                                filename.endswith("vendor.img"))
+
+    should_copy_odm_image = (prebuilt_odm_image and
+                                filename.startswith("IMAGES/") and
+                                filename.endswith("odm.img"))
+
+    if filename.startswith("IMAGES/") and not should_copy_vendor_image and not should_copy_odm_image:
       continue
 
     # Skip split super images, which will be re-generated during signing.
@@ -1217,6 +1229,13 @@ def main(argv):
 
   # Skip building userdata.img and cache.img when signing the target files.
   new_args = ["--is_signing"]
+
+  # Prebuilt images
+  prebuilt_vendor_image = misc_info.get("board_prebuilt_vendor_image") == "true"
+  prebuilt_odm_image = misc_info.get("board_prebuilt_odm_image") == "true"
+  if prebuilt_vendor_image or prebuilt_odm_image:
+    new_args.append("--add_missing")
+
   # add_img_to_target_files builds the system image from scratch, so the
   # recovery patch is guaranteed to be regenerated there.
   if OPTIONS.rebuild_recovery:
