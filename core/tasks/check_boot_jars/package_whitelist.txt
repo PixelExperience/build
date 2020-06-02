@@ -257,3 +257,7 @@ org\.ifaa\.android\.manager.*
 ###################################################
 # Touch HAL
 vendor.lineage.touch.*
+
+###################################################
+# LiveDisplay
+vendor.lineage.livedisplay.*
