@@ -2073,9 +2073,9 @@ class BlockDifference(object):
             'package_extract_file("{partition}.transfer.list"), '
             '"{partition}.new.dat", "{partition}.patch.dat"), '
             'ui_print("{partition} recovered successfully."), '
-            'abort("Failed to apply update, please download full package in http://download.pixelexperience.org"));\n'
+            'abort("E{code}: {partition} partition fails to recover"));\n'
             'endif;').format(device=self.device, ranges=ranges_str,
-                             partition=partition))
+                             partition=partition, code=code))
 
       # Abort the OTA update. Note that the incremental OTA cannot be applied
       # even if it may match the checksum of the target partition.
@@ -2088,8 +2088,8 @@ class BlockDifference(object):
         else:
           code = ErrorCode.VENDOR_VERIFICATION_FAILURE
         script.AppendExtra((
-            'abort("Failed to apply update, please download full package in http://download.pixelexperience.org");\n'
-            'endif;'))
+            'abort("E%d: %s partition has unexpected contents");\n'
+            'endif;') % (code, partition))
 
   def WritePostInstallVerifyScript(self, script):
     partition = self.partition
