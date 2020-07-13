@@ -180,17 +180,12 @@ A/B OTA specific options
 
   --override_device <device>
       Override device-specific asserts. Can be a comma-separated list.
-
-  --incremental_block_based <boolean>
-      Enable block based incremental updates
-      Disabled by default.
 """
 
 from __future__ import print_function
 
 import collections
 import logging
-import copy
 import multiprocessing
 import os.path
 import shlex
@@ -224,8 +219,6 @@ if OPTIONS.worker_threads == 0:
 OPTIONS.two_step = False
 OPTIONS.include_secondary = False
 OPTIONS.no_signing = False
-OPTIONS.incremental_block_based = False
-OPTIONS.incremental_blacklisted_files = ['system/recovery-from-boot.p', 'system/bin/install-recovery.sh', 'system/etc/recovery-resource.dat']
 OPTIONS.block_based = True
 OPTIONS.updater_binary = None
 OPTIONS.oem_source = None
@@ -254,364 +247,6 @@ DYNAMIC_PARTITION_INFO = 'META/dynamic_partitions_info.txt'
 AB_PARTITIONS = 'META/ab_partitions.txt'
 UNZIP_PATTERN = ['IMAGES/*', 'INSTALL/*', 'META/*', 'RADIO/*']
 RETROFIT_DAP_UNZIP_PATTERN = ['OTA/super_*.img', AB_PARTITIONS]
-
-def MostPopularKey(d, default):
-  """Given a dict, return the key corresponding to the largest
-  value.  Returns 'default' if the dict is empty."""
-  x = [(v, k) for (k, v) in d.iteritems()]
-  if not x:
-    return default
-  x.sort()
-  return x[-1][1]
-
-def IsSymlink(info):
-  """Return true if the zipfile.ZipInfo object passed in represents a
-  symlink."""
-  return (info.external_attr >> 16) & 0o770000 == 0o120000
-
-def ClosestFileMatch(src, tgtfiles, existing):
-  """Returns the closest file match between a source file and list
-     of potential matches.  The exact filename match is preferred,
-     then the sha1 is searched for, and finally a file with the same
-     basename is evaluated."""
-
-  result = tgtfiles.get("path:" + src.name)
-  if result is not None:
-    return result
-
-  if src.size < 1000:
-    return None
-
-  result = tgtfiles.get("sha1:" + src.sha1)
-  if result is not None and existing.get(result.name) is None:
-    return result
-  result = tgtfiles.get("file:" + src.name.split("/")[-1])
-  if result is not None and existing.get(result.name) is None:
-    return result
-  return None
-
-class ItemSet(object):
-  def __init__(self, partition, fs_config):
-    self.partition = partition
-    self.fs_config = fs_config
-    self.ITEMS = {}
-
-  def Get(self, name, is_dir=False):
-    if name not in self.ITEMS:
-      self.ITEMS[name] = Item(self, name, is_dir=is_dir)
-    return self.ITEMS[name]
-
-  def GetMetadata(self, input_zip):
-    # The target_files contains a record of what the uid,
-    # gid, and mode are supposed to be.
-    output = input_zip.read(self.fs_config)
-
-    for line in output.split("\n"):
-      if not line:
-        continue
-      columns = line.split()
-      name, uid, gid, mode = columns[:4]
-      selabel = None
-      capabilities = None
-
-      # After the first 4 columns, there are a series of key=value
-      # pairs. Extract out the fields we care about.
-      for element in columns[4:]:
-        key, value = element.split("=")
-        if key == "selabel":
-          selabel = value
-        if key == "capabilities":
-          capabilities = value
-
-      if name == "":
-        name = self.partition
-      elif self.partition == "root":
-        name = "root/" + name
-
-      i = self.ITEMS.get(name, None)
-      if i is not None:
-        i.uid = int(uid)
-        i.gid = int(gid)
-        i.mode = int(mode, 8)
-        i.selabel = selabel
-        i.capabilities = capabilities
-        if i.is_dir:
-          i.children.sort(key=lambda i: i.name)
-
-class Item(object):
-  """Items represent the metadata (user, group, mode) of files and
-  directories in the system image."""
-  def __init__(self, itemset, name, is_dir=False):
-    self.itemset = itemset
-    self.name = name
-    self.uid = None
-    self.gid = None
-    self.mode = None
-    self.selabel = None
-    self.capabilities = None
-    self.is_dir = is_dir
-    self.descendants = None
-    self.best_subtree = None
-
-    if name:
-      self.parent = itemset.Get(os.path.dirname(name), is_dir=True)
-      self.parent.children.append(self)
-    else:
-      self.parent = None
-    if self.is_dir:
-      self.children = []
-
-  def Dump(self, indent=0):
-    if self.uid is not None:
-      print("%s%s %d %d %o" % (
-          "  " * indent, self.name, self.uid, self.gid, self.mode))
-    else:
-      print("%s%s %s %s %s" % (
-          "  " * indent, self.name, self.uid, self.gid, self.mode))
-    if self.is_dir:
-      print("%s%s" % ("  " * indent, self.descendants))
-      print("%s%s" % ("  " * indent, self.best_subtree))
-      for i in self.children:
-        i.Dump(indent=indent+1)
-
-  def CountChildMetadata(self):
-    """Count up the (uid, gid, mode, selabel, capabilities) tuples for
-    all children and determine the best strategy for using set_perm_recursive
-    and set_perm to correctly chown/chmod all the files to their desired
-    values.  Recursively calls itself for all descendants.
-    Returns a dict of {(uid, gid, dmode, fmode, selabel, capabilities): count}
-    counting up all descendants of this node.  (dmode or fmode may be None.)
-    Also sets the best_subtree of each directory Item to the (uid, gid, dmode,
-    fmode, selabel, capabilities) tuple that will match the most descendants of
-    that Item.
-    """
-
-    assert self.is_dir
-    key = (self.uid, self.gid, self.mode, None, self.selabel,
-           self.capabilities)
-    self.descendants = {key: 1}
-    d = self.descendants
-    for i in self.children:
-      if i.is_dir:
-        for k, v in i.CountChildMetadata().iteritems():
-          d[k] = d.get(k, 0) + v
-      else:
-        k = (i.uid, i.gid, None, i.mode, i.selabel, i.capabilities)
-        d[k] = d.get(k, 0) + 1
-
-    # Find the (uid, gid, dmode, fmode, selabel, capabilities)
-    # tuple that matches the most descendants.
-
-    # First, find the (uid, gid) pair that matches the most
-    # descendants.
-    ug = {}
-    for (uid, gid, _, _, _, _), count in d.iteritems():
-      ug[(uid, gid)] = ug.get((uid, gid), 0) + count
-    ug = MostPopularKey(ug, (0, 0))
-
-    # Now find the dmode, fmode, selabel, and capabilities that match
-    # the most descendants with that (uid, gid), and choose those.
-    best_dmode = (0, 0o755)
-    best_fmode = (0, 0o644)
-    best_selabel = (0, None)
-    best_capabilities = (0, None)
-    for k, count in d.iteritems():
-      if k[:2] != ug:
-        continue
-      if k[2] is not None and count >= best_dmode[0]:
-        best_dmode = (count, k[2])
-      if k[3] is not None and count >= best_fmode[0]:
-        best_fmode = (count, k[3])
-      if k[4] is not None and count >= best_selabel[0]:
-        best_selabel = (count, k[4])
-      if k[5] is not None and count >= best_capabilities[0]:
-        best_capabilities = (count, k[5])
-    self.best_subtree = ug + (
-        best_dmode[1], best_fmode[1], best_selabel[1], best_capabilities[1])
-
-    return d
-
-  def SetPermissions(self, script):
-    """Append set_perm/set_perm_recursive commands to 'script' to
-    set all permissions, users, and groups for the tree of files
-    rooted at 'self'."""
-
-    self.CountChildMetadata()
-
-    def recurse(item, current):
-      # current is the (uid, gid, dmode, fmode, selabel, capabilities) tuple
-      # that the current item (and all its children) have already been set to.
-      # We only need to issue set_perm/set_perm_recursive commands if we're
-      # supposed to be something different.
-      item_path = FixUpPartitionPath("/" + item.name)
-
-      if item.is_dir:
-        if current != item.best_subtree:
-          script.SetPermissionsRecursive(item_path, *item.best_subtree)
-          current = item.best_subtree
-
-        if item.name not in OPTIONS.incremental_blacklisted_files or \
-           item.uid != current[0] or item.gid != current[1] or \
-           item.mode != current[2] or item.selabel != current[4] or \
-           item.capabilities != current[5]:
-           if item.uid is not None and item.gid is not None and item.mode is not None:
-              script.SetPermissions(item_path, item.uid, item.gid,
-                                    item.mode, item.selabel, item.capabilities)
-
-        for i in item.children:
-          recurse(i, current)
-      else:
-        if item.name not in OPTIONS.incremental_blacklisted_files or \
-               item.uid != current[0] or item.gid != current[1] or \
-               item.mode != current[3] or item.selabel != current[4] or \
-               item.capabilities != current[5]:
-          script.SetPermissions(item_path, item.uid, item.gid,
-                                item.mode, item.selabel, item.capabilities)
-
-    recurse(self, (-1, -1, -1, -1, None, None))
-
-def CopyPartitionFiles(itemset, input_zip, output_zip=None, substitute=None):
-  """Copies files for the partition in the input zip to the output
-  zip.  Populates the Item class with their metadata, and returns a
-  list of symlinks.  output_zip may be None, in which case the copy is
-  skipped (but the other side effects still happen).  substitute is an
-  optional dict of {output filename: contents} to be output instead of
-  certain input files.
-  """
-
-  symlinks = []
-
-  partition = itemset.partition
-
-  for info in input_zip.infolist():
-    if info.filename.lower() in OPTIONS.incremental_blacklisted_files:
-      continue
-    prefix = partition.upper() + "/"
-    if info.filename.startswith(prefix):
-      basefilename = info.filename[len(prefix):]
-      if IsSymlink(info):
-        root_path = FixUpPartitionPath("/" + partition)
-        symlinks.append((input_zip.read(info.filename),
-                         root_path + "/" + basefilename))
-      else:
-        info2 = copy.copy(info)
-        fn = info2.filename = partition + "/" + basefilename
-        if substitute and fn in substitute and substitute[fn] is None:
-          continue
-        if output_zip is not None:
-          if substitute and fn in substitute:
-            data = substitute[fn]
-          else:
-            data = input_zip.read(info.filename)
-          common.ZipWriteStr(output_zip, info2, data)
-        if fn.endswith("/"):
-          itemset.Get(fn[:-1], is_dir=True)
-        else:
-          itemset.Get(fn)
-
-  symlinks.sort()
-  return symlinks
-
-def LoadPartitionFiles(z, partition):
-  """Load all the files from the given partition in a given target-files
-  ZipFile, and return a dict of {filename: File object}."""
-  out = {}
-  prefix = partition.upper() + "/"
-  for info in z.infolist():
-    if info.filename.lower() in OPTIONS.incremental_blacklisted_files:
-      continue
-    if info.filename.startswith(prefix) and not IsSymlink(info):
-      basefilename = info.filename[len(prefix):]
-      fn = partition + "/" + basefilename
-      data = z.read(info.filename)
-      out[fn] = common.File(fn, data, info.compress_size)
-  return out
-
-def GetSystemBasePath():
-  if OPTIONS.target_info_dict.get("system_root_image") == "true":
-    return "system_root"
-  else:
-    return "system"
-
-def FixUpPartitionPath(path):
-  preprend_bar = False
-  if path.startswith('/'):
-    path = path[1:]
-    preprend_bar = True
-  if path == 'root':
-    path = GetSystemBasePath()
-  elif path == 'system':
-    path = GetSystemBasePath() + "/system"
-  elif path.startswith('root/'):
-    path = GetSystemBasePath() + "/" + path[5:]
-  elif path.startswith('system/'):
-    path = GetSystemBasePath() + "/system/" + path[7:]
-  if preprend_bar:
-    path = "/" + path
-  return path
-
-class FileDifference(object):
-  def __init__(self, partition, source_zip, target_zip, output_zip):
-    self.partition = partition
-    print("Loading target of " + partition + " partition ...")
-    self.target_data = target_data = LoadPartitionFiles(target_zip, partition)
-    print("Loading source of " + partition + " partition ...")
-    self.source_data = source_data = LoadPartitionFiles(source_zip, partition)
-
-    self.patch_list = patch_list = []
-    self.renames = renames = {}
-
-    matching_file_cache = {}
-    for fn, sf in source_data.items():
-      assert fn == sf.name
-      matching_file_cache["path:" + fn] = sf
-      # Only allow eligibility for filename/sha matching
-      # if there isn't a perfect path match.
-      if target_data.get(sf.name) is None:
-        matching_file_cache["file:" + fn.split("/")[-1]] = sf
-        matching_file_cache["sha:" + sf.sha1] = sf
-
-    for fn in sorted(target_data.keys()):
-      tf = target_data[fn]
-      assert fn == tf.name
-      sf = ClosestFileMatch(tf, matching_file_cache, renames)
-      if sf is not None and sf.name != tf.name:
-        print("File has moved from " + sf.name + " to " + tf.name)
-        renames[sf.name] = tf
-
-      if sf is None or tf.sha1 != sf.sha1:
-        partition_prefix = partition + "/"
-        zip_file_name = partition_prefix.upper() + tf.name[len(partition_prefix):]
-        d = target_zip.read(zip_file_name)
-        common.ZipWriteStr(output_zip, tf.name, d)
-        if sf is not None:
-          patch_list.append((tf, sf, tf.size, common.sha1(d).hexdigest()))
-      else:
-        # Target file data identical to source (may still be renamed)
-        pass
-
-  def RemoveUnneededFiles(self, script, extras=()):
-    file_list = ["/" + i for i in self.source_data
-                  if i not in self.target_data and i not in self.renames]
-    file_list += list(extras)
-    new_file_list = []
-    for unneeded_file in file_list:
-      unneeded_file = FixUpPartitionPath(unneeded_file)
-      print("Removing unneeded file " + unneeded_file)
-      new_file_list.append(unneeded_file)
-
-    # Sort the list in descending order, which removes all the files first
-    # before attempting to remove the folder. (Bug: 22960996)
-    script.DeleteFiles(sorted(new_file_list, reverse=True))
-
-  def EmitRenames(self, script):
-    if len(self.renames) > 0:
-      script.Print("Renaming files...")
-      for src, tgt in self.renames.iteritems():
-        src = FixUpPartitionPath("/" + src)
-        tgt.name = FixUpPartitionPath("/" + tgt.name)
-        print("Renaming " + src + " to " + tgt.name)
-        script.RenameFile(src, tgt.name)
 
 # Images to be excluded from secondary payload. We essentially only keep
 # 'system_other' and bootloader partitions.
@@ -759,7 +394,7 @@ class BuildInfo(object):
   def WriteMountOemScript(self, script):
     assert self.oem_props is not None
     recovery_mount_options = self.info_dict.get("recovery_mount_options")
-    script.Mount("/oem")
+    script.Mount("/oem", recovery_mount_options)
 
   def WriteDeviceAssertions(self, script, oem_no_mount):
     # Read the property directly if not using OEM properties.
@@ -1368,8 +1003,6 @@ else if get_stage("%(bcb_dev)s") == "3/3" then
   # Dump fingerprints
   script.Print("Target: {}".format(target_info.fingerprint))
 
-  script.AppendExtra("ifelse(is_mounted(\"/system\"), unmount(\"/system\"));")
-
   android_version = target_info.GetBuildProp("ro.build.version.release")
   build_id = target_info.GetBuildProp("ro.build.id")
   build_date = target_info.GetBuildProp("org.pixelexperience.build_date")
@@ -1537,19 +1170,11 @@ def GetPackageMetadata(target_info, source_info=None):
           'ro.build.version.security_patch'),
   }
 
-  is_incremental = source_info is not None
-
   if target_info.is_ab:
     metadata['ota-type'] = 'AB'
     metadata['ota-required-cache'] = '0'
   else:
-    if is_incremental:
-      if OPTIONS.incremental_block_based:
-        metadata['ota-type'] = 'BLOCK'
-      else:
-        metadata['ota-type'] = 'FILE'
-    else:
-      metadata['ota-type'] = 'BLOCK'
+    metadata['ota-type'] = 'BLOCK'
 
   if OPTIONS.wipe_user_data:
     metadata['ota-wipe'] = 'yes'
@@ -1557,6 +1182,7 @@ def GetPackageMetadata(target_info, source_info=None):
   if OPTIONS.retrofit_dynamic_partitions:
     metadata['ota-retrofit-dynamic-partitions'] = 'yes'
 
+  is_incremental = source_info is not None
   if is_incremental:
     metadata['pre-build'] = source_info.fingerprint
     metadata['pre-build-incremental'] = source_info.GetBuildProp(
@@ -1987,6 +1613,8 @@ def WriteBlockIncrementalOTAPackage(target_zip, source_zip, output_file):
       "/tmp/boot.img", "boot.img", OPTIONS.source_tmp, "BOOT", source_info)
   target_boot = common.GetBootableImage(
       "/tmp/boot.img", "boot.img", OPTIONS.target_tmp, "BOOT", target_info)
+  updating_boot = (not OPTIONS.two_step and
+                   (source_boot.data != target_boot.data))
 
   target_recovery = common.GetBootableImage(
       "/tmp/recovery.img", "recovery.img", OPTIONS.target_tmp, "RECOVERY")
@@ -1996,6 +1624,9 @@ def WriteBlockIncrementalOTAPackage(target_zip, source_zip, output_file):
                                         target_info=target_info,
                                         source_info=source_info,
                                         device_specific=device_specific)
+
+  AddCompatibilityArchiveIfTrebleEnabled(
+      target_zip, output_zip, target_info, source_info)
 
   # Assertions (e.g. device properties check).
   target_info.WriteDeviceAssertions(script, OPTIONS.oem_no_mount)
@@ -2052,57 +1683,38 @@ else if get_stage("%(bcb_dev)s") != "3/3" then
   script.Print("Source: {}".format(source_info.fingerprint))
   script.Print("Target: {}".format(target_info.fingerprint))
 
-  android_version = target_info.GetBuildProp("ro.build.version.release")
-  device = target_info.GetBuildProp("org.pixelexperience.device")
-
-  prev_build_id = source_info.GetBuildProp("ro.build.id")
-  build_id = target_info.GetBuildProp("ro.build.id")
-
-  prev_build_date = source_info.GetBuildProp("org.pixelexperience.build_date")
-  build_date = target_info.GetBuildProp("org.pixelexperience.build_date")
-
-  prev_security_patch = source_info.GetBuildProp("ro.build.version.security_patch")
-  security_patch = target_info.GetBuildProp("ro.build.version.security_patch")
-
-  script.Print("----------------------------------------------");
-  script.Print("              Pixel Experience");
-  script.Print("               by jhenrique09");
-  script.Print("----------------------------------------------");
-  script.Print(" Android version: %s"%(android_version));
-  if prev_build_id != build_id:
-    script.Print(" Build id: %s -> %s"%(prev_build_id, build_id));
-  else:
-    script.Print(" Build id: %s"%(build_id));
-  script.Print(" Build date: %s -> %s"%(prev_build_date, build_date));
-  if prev_security_patch != security_patch:
-    script.Print(" Security patch: %s -> %s"%(prev_security_patch, security_patch));
-  else:
-    script.Print(" Security patch: %s"%(security_patch));
-  script.Print(" Device: %s"%(device));
-  script.Print("----------------------------------------------");
-
-  CopyInstallTools(output_zip)
-  script.UnpackPackageDir("install", "/tmp/install")
-  script.SetPermissionsRecursive("/tmp/install", 0, 0, 0755, 0644, None, None)
-  script.SetPermissionsRecursive("/tmp/install/bin", 0, 0, 0755, 0755, None, None)
-
   script.Print("Verifying current system...")
 
   device_specific.IncrementalOTA_VerifyBegin()
 
-  # Check the required cache size (i.e. stashed blocks).
-  size = []
-  if system_diff:
-    size.append(system_diff.required_cache)
-  if vendor_diff:
-    size.append(vendor_diff.required_cache)
+  WriteFingerprintAssertion(script, target_info, source_info)
 
+  # Check the required cache size (i.e. stashed blocks).
   required_cache_sizes = [diff.required_cache for diff in
                           block_diff_dict.values()]
+  if updating_boot:
+    boot_type, boot_device = common.GetTypeAndDevice("/boot", source_info)
+    d = common.Difference(target_boot, source_boot)
+    _, _, d = d.ComputePatch()
+    if d is None:
+      include_full_boot = True
+      common.ZipWriteStr(output_zip, "boot.img", target_boot.data)
+    else:
+      include_full_boot = False
 
-  required_cache_sizes.append(target_boot.size)
+      logger.info(
+          "boot      target: %d  source: %d  diff: %d", target_boot.size,
+          source_boot.size, len(d))
 
-  common.ZipWriteStr(output_zip, "boot.img", target_boot.data)
+      common.ZipWriteStr(output_zip, "boot.img.p", d)
+
+      script.PatchPartitionCheck(
+          "{}:{}:{}:{}".format(
+              boot_type, boot_device, target_boot.size, target_boot.sha1),
+          "{}:{}:{}:{}".format(
+              boot_type, boot_device, source_boot.size, source_boot.sha1))
+
+      required_cache_sizes.append(target_boot.size)
 
   if required_cache_sizes:
     script.CacheFreeSpaceCheck(max(required_cache_sizes))
@@ -2150,8 +1762,32 @@ else
                              progress=progress_dict.get(block_diff.partition),
                              write_verify_script=OPTIONS.verify)
 
-  script.Print("Installing boot image...")
-  script.WriteRawImage("/boot", "boot.img")
+  if OPTIONS.two_step:
+    common.ZipWriteStr(output_zip, "boot.img", target_boot.data)
+    script.WriteRawImage("/boot", "boot.img")
+    logger.info("writing full boot image (forced by two-step mode)")
+
+  if not OPTIONS.two_step:
+    if updating_boot:
+      if include_full_boot:
+        logger.info("boot image changed; including full.")
+        script.Print("Installing boot image...")
+        script.WriteRawImage("/boot", "boot.img")
+      else:
+        # Produce the boot image by applying a patch to the current
+        # contents of the boot partition, and write it back to the
+        # partition.
+        logger.info("boot image changed; including patch.")
+        script.Print("Patching boot image...")
+        script.ShowProgress(0.1, 10)
+        script.PatchPartition(
+            '{}:{}:{}:{}'.format(
+                boot_type, boot_device, target_boot.size, target_boot.sha1),
+            '{}:{}:{}:{}'.format(
+                boot_type, boot_device, source_boot.size, source_boot.sha1),
+            'boot.img.p')
+    else:
+      logger.info("boot image unchanged; skipping.")
 
   # Do device-specific installation (eg, write radio image).
   device_specific.IncrementalOTA_InstallEnd()
@@ -2500,307 +2136,6 @@ def WriteABOTAPackageWithBrilloScript(target_file, output_file,
   )
   FinalizeMetadata(metadata, staging_file, output_file, needed_property_files)
 
-def WriteIncrementalOTAPackage(target_zip, source_zip, output_file):
-  target_info = BuildInfo(OPTIONS.target_info_dict, OPTIONS.oem_dicts)
-  source_info = BuildInfo(OPTIONS.source_info_dict, OPTIONS.oem_dicts)
-
-  source_api_version = OPTIONS.source_info_dict["recovery_api_version"]
-  target_api_version = OPTIONS.target_info_dict["recovery_api_version"]
-
-  if source_api_version == 0:
-    logger.warning(
-        "Generating edify script for a source that can't install it.")
-
-  script = edify_generator.EdifyGenerator(
-      source_api_version, target_info, fstab=source_info["fstab"])
-
-  recovery_mount_options = OPTIONS.source_info_dict.get(
-      "recovery_mount_options")
-  source_oem_props = OPTIONS.source_info_dict.get("oem_fingerprint_properties")
-  target_oem_props = OPTIONS.target_info_dict.get("oem_fingerprint_properties")
-  oem_dicts = None
-  if source_oem_props or target_oem_props:
-    oem_dicts = _LoadOemDicts(script)
-
-  metadata = GetPackageMetadata(target_info, source_info)
-
-  if not OPTIONS.no_signing:
-    staging_file = common.MakeTempFile(suffix='.zip')
-  else:
-    staging_file = output_file
-
-  output_zip = zipfile.ZipFile(
-      staging_file, "w", compression=zipfile.ZIP_DEFLATED)
-
-  if HasVendorPartition(target_zip):
-    if not HasVendorPartition(source_zip):
-      raise RuntimeError("can't generate incremental that adds /vendor")
-
-  if HasProductPartition(target_zip):
-    if not HasProductPartition(source_zip):
-      raise RuntimeError("can't generate incremental that adds /product")
-
-  device_specific = common.DeviceSpecificParams(
-      source_zip=source_zip,
-      source_api_version=source_api_version,
-      source_tmp=OPTIONS.source_tmp,
-      target_zip=target_zip,
-      target_api_version=target_api_version,
-      target_tmp=OPTIONS.target_tmp,
-      output_zip=output_zip,
-      script=script,
-      metadata=metadata,
-      info_dict=source_info)
-
-  root_diff = FileDifference("root", source_zip, target_zip, output_zip)
-  system_diff = FileDifference("system", source_zip, target_zip, output_zip)
-
-  if HasVendorPartition(target_zip):
-    vendor_diff = FileDifference("vendor", source_zip, target_zip, output_zip)
-  else:
-    vendor_diff = None
-
-  if HasProductPartition(target_zip):
-    product_diff = FileDifference("product_diff", source_zip, target_zip, output_zip)
-  else:
-    product_diff = None
-
-  metadata["pre-build"] = source_info.fingerprint
-  metadata["post-build"] = target_info.fingerprint
-  metadata["pre-build-incremental"] = source_info.GetBuildProp(
-        'ro.build.version.incremental')
-  metadata["post-build-incremental"] = target_info.GetBuildProp(
-        'ro.build.version.incremental')
-
-  source_boot = common.GetBootableImage(
-      "/tmp/boot.img", "boot.img", OPTIONS.source_tmp, "BOOT",
-      OPTIONS.source_info_dict)
-  target_boot = common.GetBootableImage(
-      "/tmp/boot.img", "boot.img", OPTIONS.target_tmp, "BOOT")
-
-  target_info.WriteDeviceAssertions(script, OPTIONS.oem_no_mount)
-  device_specific.IncrementalOTA_Assertions()
-
-  android_version = target_info.GetBuildProp("ro.build.version.release")
-  device = target_info.GetBuildProp("org.pixelexperience.device")
-
-  prev_build_id = source_info.GetBuildProp("ro.build.id")
-  build_id = target_info.GetBuildProp("ro.build.id")
-
-  prev_build_date = source_info.GetBuildProp("org.pixelexperience.build_date")
-  build_date = target_info.GetBuildProp("org.pixelexperience.build_date")
-
-  prev_security_patch = source_info.GetBuildProp("ro.build.version.security_patch")
-  security_patch = target_info.GetBuildProp("ro.build.version.security_patch")
-
-  script.Print("----------------------------------------------");
-  script.Print("              Pixel Experience");
-  script.Print("               by jhenrique09");
-  script.Print("----------------------------------------------");
-  script.Print(" Android version: %s"%(android_version));
-  if prev_build_id != build_id:
-    script.Print(" Build id: %s -> %s"%(prev_build_id, build_id));
-  else:
-    script.Print(" Build id: %s"%(build_id));
-  script.Print(" Build date: %s -> %s"%(prev_build_date, build_date));
-  if prev_security_patch != security_patch:
-    script.Print(" Security patch: %s -> %s"%(prev_security_patch, security_patch));
-  else:
-    script.Print(" Security patch: %s"%(security_patch));
-  script.Print(" Device: %s"%(device));
-  script.Print("----------------------------------------------");
-
-  CopyInstallTools(output_zip)
-  script.UnpackPackageDir("install", "/tmp/install")
-  script.SetPermissionsRecursive("/tmp/install", 0, 0, 0755, 0644, None, None)
-  script.SetPermissionsRecursive("/tmp/install/bin", 0, 0, 0755, 0755, None, None)
-
-  script.Print("Verifying current system...")
-
-  device_specific.IncrementalOTA_VerifyBegin()
-
-  script.ShowProgress(0.1, 0)
-
-  script.Comment("---- start making verification here ----")
-
-  script.CheckAndUnmount("/" + GetSystemBasePath())
-
-  script.fstab["/system"].mount_point = "/" + GetSystemBasePath()
-  script.Mount("/system")
-
-  if HasVendorPartition(target_zip):
-    script.CheckAndUnmount("/vendor")
-    script.Mount("/vendor")
-
-  if HasProductPartition(target_zip):
-    script.CheckAndUnmount("/product")
-    script.Mount("/product")
-
-  error_msg = "Failed to apply update, please download full package at https://download.pixelexperience.org/" + device
-
-  prop_path = "/" + GetSystemBasePath() + "/system/build.prop"
-
-  source_version_prop = "org.pixelexperience.version.display"
-
-  source_version = os.path.splitext(os.path.basename(OPTIONS.incremental_source))[0]
-
-  script.IncrementalFileBasedSourceVersionCheck(prop_path, source_version_prop, source_version, error_msg)
-
-  common.ZipWriteStr(output_zip, "boot.img", target_boot.data)
-
-  device_specific.IncrementalOTA_VerifyEnd()
-
-  script.Comment("---- start making changes here ----")
-
-  device_specific.IncrementalOTA_InstallBegin()
-
-  script.Print("Updating system...")
-
-  script.WriteRawImage("/boot", "boot.img")
-
-  script.ShowProgress(0.1, 10)
-
-  root_diff.RemoveUnneededFiles(script)
-  system_diff.RemoveUnneededFiles(script)
-  if vendor_diff:
-    vendor_diff.RemoveUnneededFiles(script)
-  if product_diff:
-    product_diff.RemoveUnneededFiles(script)
-
-  root_items = ItemSet("root", "META/root_filesystem_config.txt")
-  system_items = ItemSet("system", "META/filesystem_config.txt")
-  if vendor_diff:
-    vendor_items = ItemSet("vendor", "META/vendor_filesystem_config.txt")
-  if product_diff:
-    product_items = ItemSet("product", "META/product_filesystem_config.txt")
-
-  target_symlinks = CopyPartitionFiles(root_items, target_zip, None)
-  target_symlinks.extend(CopyPartitionFiles(system_items, target_zip, None))
-  if vendor_diff:
-    target_symlinks.extend(CopyPartitionFiles(vendor_items, target_zip, None))
-  if product_diff:
-    target_symlinks.extend(CopyPartitionFiles(product_items, target_zip, None))
-
-  temp_script = script.MakeTemporary()
-  root_items.GetMetadata(target_zip)
-  root_items.Get("root").SetPermissions(temp_script)
-  system_items.GetMetadata(target_zip)
-  system_items.Get("system").SetPermissions(temp_script)
-  if vendor_diff:
-    vendor_items.GetMetadata(target_zip)
-    vendor_items.Get("vendor").SetPermissions(temp_script)
-  if product_diff:
-    product_items.GetMetadata(target_zip)
-    product_items.Get("product").SetPermissions(temp_script)
-
-  # Note that this call will mess up the trees of Items, so make sure
-  # we're done with them.
-  source_symlinks = CopyPartitionFiles(root_items, source_zip, None)
-  source_symlinks.extend(CopyPartitionFiles(system_items, source_zip, None))
-  if vendor_diff:
-    source_symlinks.extend(CopyPartitionFiles(vendor_items, source_zip, None))
-  if product_diff:
-    source_symlinks.extend(CopyPartitionFiles(product_items, source_zip, None))
-
-  target_symlinks_d = dict([(i[1], i[0]) for i in target_symlinks])
-  source_symlinks_d = dict([(i[1], i[0]) for i in source_symlinks])
-
-  # Delete all the symlinks in source that aren't in target.  This
-  # needs to happen before files are unpacked, in case a
-  # symlink in the source is replaced by a real file in the target.
-
-  # If a symlink in the source will be replaced by a regular file, we cannot
-  # delete the symlink/file in case the package gets applied again. For such
-  # a symlink, we prepend a sha1_check() to detect if it has been updated.
-  # (Bug: 23646151)
-  replaced_symlinks = dict()
-  for tf, sf, _, _ in root_diff.patch_list:
-    replaced_symlinks["/%s" % (sf.name,)] = tf.name
-  for tf, sf, _, _ in system_diff.patch_list:
-    replaced_symlinks["/%s" % (sf.name,)] = tf.name
-  if vendor_diff:
-    for tf, sf, _, _ in vendor_diff.patch_list:
-      replaced_symlinks["/%s" % (sf.name,)] = tf.name
-  if product_diff:
-    for tf, sf, _, _ in product_diff.patch_list:
-      replaced_symlinks["/%s" % (sf.name,)] = tf.name
-
-  for tf in root_diff.renames.values():
-    replaced_symlinks["/%s" % (tf.name,)] = tf.sha1
-  for tf in system_diff.renames.values():
-    replaced_symlinks["/%s" % (tf.name,)] = tf.sha1
-  if vendor_diff:
-    for tf in vendor_diff.renames.values():
-      replaced_symlinks["/%s" % (tf.name,)] = tf.sha1
-  if product_diff:
-    for tf in product_diff.renames.values():
-      replaced_symlinks["/%s" % (tf.name,)] = tf.sha1
-
-  always_delete = []
-  may_delete = []
-  for dest, link in source_symlinks:
-    if link not in target_symlinks_d:
-      if link in replaced_symlinks:
-        may_delete.append((link, replaced_symlinks[link]))
-      else:
-        always_delete.append(link)
-  script.DeleteFiles(always_delete)
-  script.DeleteFilesIfNotMatching(may_delete)
-
-  script.UnpackPackageDir("root", "/" + GetSystemBasePath())
-  script.UnpackPackageDir("system", "/" + GetSystemBasePath() + "/system")
-  if vendor_diff:
-    script.UnpackPackageDir("vendor", "/vendor")
-  if product_diff:
-    script.UnpackPackageDir("product", "/product")
-
-  root_diff.EmitRenames(script)
-  system_diff.EmitRenames(script)
-  if vendor_diff:
-    vendor_diff.EmitRenames(script)
-  if product_diff:
-    product_diff.EmitRenames(script)
-
-  # Create all the symlinks that don't already exist, or point to
-  # somewhere different than what we want.  Delete each symlink before
-  # creating it, since the 'symlink' command won't overwrite.
-  to_create = []
-  for dest, link in target_symlinks:
-    if link in source_symlinks_d:
-      if dest != source_symlinks_d[link]:
-        to_create.append((dest, link))
-    else:
-      to_create.append((dest, link))
-  script.DeleteFiles([i[1] for i in to_create])
-  script.MakeSymlinks(to_create)
-
-  # Now that the symlinks are created, we can set all the
-  # permissions.
-  script.AppendScript(temp_script)
-
-  # Unmount
-  script.UnmountAll()
-
-  # Do device-specific installation (eg, write radio image).
-  device_specific.IncrementalOTA_InstallEnd()
-
-  if OPTIONS.extra_script is not None:
-    script.AppendExtra(OPTIONS.extra_script)
-
-  script.SetProgress(1)
-
-  script.AddToZip(target_zip, output_zip, input_path=OPTIONS.updater_binary)
-  metadata["ota-required-cache"] = str(script.required_cache)
-
-  # We haven't written the metadata entry yet, which will be handled in
-  # FinalizeMetadata().
-  common.ZipClose(output_zip)
-
-  # Sign the generated zip package unless no_signing is specified.
-  needed_property_files = (
-      NonAbOtaPropertyFiles(),
-  )
-  FinalizeMetadata(metadata, staging_file, output_file, needed_property_files)
 
 def main(argv):
 
@@ -2870,8 +2205,6 @@ def main(argv):
       OPTIONS.output_metadata_path = a
     elif o in ("--override_device"):
       OPTIONS.override_device = a
-    elif o in ("--incremental_block_based"):
-      OPTIONS.incremental_block_based = bool(a.lower() == 'true')
     else:
       return False
     return True
@@ -2907,7 +2240,6 @@ def main(argv):
                                  "skip_compatibility_check",
                                  "output_metadata_path=",
                                  "override_device=",
-                                 "incremental_block_based=",
                              ], extra_option_handler=option_handler)
 
   if len(args) != 2:
@@ -2972,12 +2304,6 @@ def main(argv):
     OPTIONS.skip_postinstall = True
 
   ab_update = OPTIONS.info_dict.get("ab_update") == "true"
-  dynamic_partitions = OPTIONS.info_dict.get("use_dynamic_partitions") == "true"
-  block_based_incremental = OPTIONS.info_dict.get("use_incremental_block_based") == "true"
-
-  # Use block based for delta
-  if dynamic_partitions or block_based_incremental:
-    OPTIONS.incremental_block_based = True
 
   # Use the default key to sign the package if not specified with package_key.
   # package_keys are needed on ab_updates, so always define them if an
@@ -3051,16 +2377,10 @@ def main(argv):
         OPTIONS.incremental_source, UNZIP_PATTERN)
     with zipfile.ZipFile(args[0], 'r') as input_zip, \
         zipfile.ZipFile(OPTIONS.incremental_source, 'r') as source_zip:
-      if OPTIONS.incremental_block_based:
-        WriteBlockIncrementalOTAPackage(
-            input_zip,
-            source_zip,
-            output_file=args[1])
-      else:
-        WriteIncrementalOTAPackage(
-            input_zip,
-            source_zip,
-            output_file=args[1])
+      WriteBlockIncrementalOTAPackage(
+          input_zip,
+          source_zip,
+          output_file=args[1])
 
     if OPTIONS.log_diff:
       with open(OPTIONS.log_diff, 'w') as out_file:
