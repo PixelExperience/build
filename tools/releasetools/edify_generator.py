@@ -31,14 +31,6 @@ class EdifyGenerator(object):
     else:
       self.fstab = fstab
 
-  def MakeTemporary(self):
-    """Make a temporary script object whose commands can latter be
-    appended to the parent script with AppendScript().  Used when the
-    caller wants to generate script commands out-of-order."""
-    x = EdifyGenerator(self.version, self.info)
-    x.mounts = self.mounts
-    return x
-
   @property
   def required_cache(self):
     """Return the minimum cache size to apply the update."""
@@ -203,11 +195,6 @@ class EdifyGenerator(object):
             target=target, source=source,
             code=common.ErrorCode.BAD_PATCH_FILE)))
 
-  def IncrementalFileBasedSourceVersionCheck(self, prop_path, source_version_prop, source_version, error_msg):
-    """Check that the given file has one of the
-    given sha1 hashes."""
-    self.script.append('assert(file_getprop("%s", "%s") == "%s" || abort("%s"));' % (prop_path, source_version_prop, source_version, error_msg))
-
   def CacheFreeSpaceCheck(self, amount):
     """Check that there's at least 'amount' space that can be made
     available on /cache."""
@@ -288,26 +275,6 @@ class EdifyGenerator(object):
 
     self.script.append('wipe_block_device("%s", %s);' % (device, size))
 
-  def DeleteFiles(self, file_list):
-    """Delete all files in file_list."""
-    if not file_list:
-      return
-    cmd = "delete(" + ",\0".join(['"%s"' % (i,) for i in file_list]) + ");"
-    self.script.append(self.WordWrap(cmd))
-
-  def DeleteFilesIfNotMatching(self, file_list):
-    """Delete the file in file_list if not matching the checksum."""
-    if not file_list:
-      return
-    for name, sha1 in file_list:
-      cmd = ('sha1_check(read_file("{name}"), "{sha1}") || '
-             'delete("{name}");'.format(name=name, sha1=sha1))
-      self.script.append(self.WordWrap(cmd))
-
-  def RenameFile(self, srcfile, tgtfile):
-    """Moves a file from one location to another."""
-    self.script.append('rename("%s", "%s");' % (srcfile, tgtfile))
-
   def ApplyPatch(self, srcfile, tgtfile, tgtsize, tgtsha1, *patchpairs):
     """Apply binary patches (in *patchpairs) to the given srcfile to
     produce tgtfile (which may be "-" to indicate overwriting the
@@ -350,17 +317,21 @@ class EdifyGenerator(object):
   def SetPermissionsRecursive(self, fn, uid, gid, dmode, fmode, selabel,
                               capabilities):
     """Recursively set path ownership and permissions."""
-    if capabilities is None:
-      capabilities = "0x0"
-    cmd = 'set_metadata_recursive("%s", "uid", %d, "gid", %d, ' \
-        '"dmode", 0%o, "fmode", 0%o' \
-        % (fn, uid, gid, dmode, fmode)
-    if not fn.startswith("/tmp"):
-      cmd += ', "capabilities", "%s"' % capabilities
-    if selabel is not None:
-      cmd += ', "selabel", "%s"' % selabel
-    cmd += ');'
-    self.script.append(cmd)
+    if not self.info.get("use_set_metadata", False):
+      self.script.append('set_perm_recursive(%d, %d, 0%o, 0%o, "%s");'
+                         % (uid, gid, dmode, fmode, fn))
+    else:
+      if capabilities is None:
+        capabilities = "0x0"
+      cmd = 'set_metadata_recursive("%s", "uid", %d, "gid", %d, ' \
+          '"dmode", 0%o, "fmode", 0%o' \
+          % (fn, uid, gid, dmode, fmode)
+      if not fn.startswith("/tmp"):
+        cmd += ', "capabilities", "%s"' % capabilities
+      if selabel is not None:
+        cmd += ', "selabel", "%s"' % selabel
+      cmd += ');'
+      self.script.append(cmd)
 
   def WriteRawImage(self, mount_point, fn, mapfn=None):
     """Write the given package file into the partition for the given
@@ -383,56 +354,13 @@ class EdifyGenerator(object):
         raise ValueError(
             "don't know how to write \"%s\" partitions" % p.fs_type)
 
-  def SetPermissions(self, fn, uid, gid, mode, selabel, capabilities):
-    """Set file ownership and permissions."""
-    if capabilities is None:
-      capabilities = "0x0"
-    cmd = 'set_metadata("%s", "uid", %d, "gid", %d, "mode", 0%o, ' \
-        '"capabilities", %s' % (fn, uid, gid, mode, capabilities)
-    if selabel is not None:
-      cmd += ', "selabel", "%s"' % selabel
-    cmd += ');'
-    self.script.append(cmd)
-
-  def SetPermissionsRecursive(self, fn, uid, gid, dmode, fmode, selabel,
-                              capabilities):
-    """Recursively set path ownership and permissions."""
-    if capabilities is None:
-      capabilities = "0x0"
-    cmd = 'set_metadata_recursive("%s", "uid", %d, "gid", %d, ' \
-        '"dmode", 0%o, "fmode", 0%o' \
-        % (fn, uid, gid, dmode, fmode)
-    if not fn.startswith("/tmp"):
-      cmd += ', "capabilities", "%s"' % capabilities
-    if selabel is not None:
-      cmd += ', "selabel", "%s"' % selabel
-    cmd += ');'
-    self.script.append(cmd)
-
-  def MakeSymlinks(self, symlink_list):
-    """Create symlinks, given a list of (dest, link) pairs."""
-    by_dest = {}
-    for d, l in symlink_list:
-      by_dest.setdefault(d, []).append(l)
-
-    for dest, links in sorted(by_dest.iteritems()):
-      cmd = ('symlink("%s", ' % (dest,) +
-             ",\0".join(['"' + i + '"' for i in sorted(links)]) + ");")
-      self.script.append(self.WordWrap(cmd))
-
   def AppendExtra(self, extra):
     """Append text verbatim to the output script."""
     self.script.append(extra)
 
-  def CheckAndUnmount(self, mount_point):
-    self.script.append('ifelse(is_mounted("{0}"), unmount("{0}"));'.format(mount_point))
-    if mount_point in self.mounts:
-      self.mounts.remove(mount_point)
-
   def Unmount(self, mount_point):
     self.script.append('unmount("%s");' % mount_point)
-    if mount_point in self.mounts:
-      self.mounts.remove(mount_point)
+    self.mounts.remove(mount_point)
 
   def UnmountAll(self):
     for p in sorted(self.mounts):
