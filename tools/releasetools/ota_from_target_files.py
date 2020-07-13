@@ -2091,12 +2091,6 @@ else if get_stage("%(bcb_dev)s") != "3/3" then
   device_specific.IncrementalOTA_VerifyBegin()
 
   # Check the required cache size (i.e. stashed blocks).
-  size = []
-  if system_diff:
-    size.append(system_diff.required_cache)
-  if vendor_diff:
-    size.append(vendor_diff.required_cache)
-
   required_cache_sizes = [diff.required_cache for diff in
                           block_diff_dict.values()]
 
