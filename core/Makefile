@@ -480,6 +480,13 @@ endif
 $(INSTALLED_BUILD_PROP_TARGET): $(intermediate_system_build_prop) $(INSTALLED_RECOVERYIMAGE_TARGET)
 	@echo "Target build info: $@"
 	$(hide) grep -v 'ro.product.first_api_level' $(intermediate_system_build_prop) > $@
+ifeq (true,$(TARGET_USES_AOSP_RECOVERY))
+	$(hide) echo persist.sys.recovery_update=true >> $@
+else
+ifeq (true,$(PRODUCT_USE_DYNAMIC_PARTITIONS))
+	$(hide) echo persist.sys.recovery_update=true >> $@
+endif
+endif
 
 # -----------------------------------------------------------------
 # vendor build.prop
@@ -4066,7 +4073,7 @@ endif
 ifeq ($(TARGET_NOT_USE_GZIP_RECOVERY_RAMDISK),true)
 	$(hide) echo "no_gzip_recovery_ramdisk=true" >> $(zip_root)/META/misc_info.txt
 endif
-ifeq ($(TARGET_INCREMENTAL_BLOCK_BASED),true)
+ifeq ($(TARGET_USES_AOSP_RECOVERY),true)
 	$(hide) echo "use_incremental_block_based=true" >> $(zip_root)/META/misc_info.txt
 endif
 ifeq ($(BOARD_AVB_ENABLE),true)
