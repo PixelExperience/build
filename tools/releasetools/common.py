@@ -2241,6 +2241,9 @@ class FileSystemDifference(object):
 
     self.diff.Compute(script, output_zip)
 
+  def GetFilesToPatch(self):
+    return self.diff.GetFilesToPatch()
+
 
 DataImage = blockimgdiff.DataImage
 EmptyImage = blockimgdiff.EmptyImage
