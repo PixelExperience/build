@@ -188,7 +188,10 @@ class FileSystem(object):
   @classmethod
   def _ParseFilesystemConfig(cls, zip, partition):
     fscfg = dict()
-    prefix = "%s/" % (partition.upper())
+    if partition == 'root':
+      prefix = ""
+    else:
+      prefix = "%s/" % (partition.upper())
     prefixlen = len(prefix)
     if partition == 'system':
       filename = "META/filesystem_config.txt"
