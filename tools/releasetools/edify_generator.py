@@ -433,7 +433,7 @@ class EdifyGenerator(object):
 
   def CreateSymbolicLink(self, link_path, target_path, uid, gid):
     self.script.append(
-        'symlink("%s", "%s", %d, %d);' % (link_path, target_path, uid, gid))
+        'symlink_chown("%s", "%s", %d, %d);' % (link_path, target_path, uid, gid))
 
   def PatchFile(self, target_path, zip_file, old_hash):
     self.script.append(
