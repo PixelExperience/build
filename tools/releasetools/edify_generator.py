@@ -419,22 +419,19 @@ class EdifyGenerator(object):
                        data, perms=0o755)
 
   def CreateDirectory(self, target_path, uid, gid, mode, selabel, capabilities):
-    self.script.append(
-        'mkdir("%s", %d, %d, %o, "selabel", "%s", "capabilities", 0x%x);' %
-            (target_path, uid, gid, mode, selabel, capabilities))
+    self.script.append('mkdir("%s");' % (target_path))
+    self.ChangeMetadata(target_path, uid, gid, mode, selabel, capabilities)
 
   def DeleteDirectory(self, target_path):
-    self.script.append(
-        'rmdir("%s");' % (target_path))
+    self.script.append('rmdir("%s");' % (target_path))
 
   def CreateFile(self, target_path, zip_file, uid, gid, mode, selabel, capabilities):
-    self.script.append(
-        'create("%s", "%s", %d, %d, %o, "selabel", %s, "capabilities", 0x%x);' %
-            (target_path, zip_file, uid, gid, mode, selabel, capabilities))
+    self.script.append('create("%s", "%s");' % (target_path, zip_file))
+    self.ChangeMetadata(target_path, uid, gid, mode, selabel, capabilities)
 
   def CreateSymbolicLink(self, link_path, target_path, uid, gid):
     self.script.append(
-        'symlink("%s", "%s", %d, %d);' % (link_path, target_path, uid, gid))
+        'symlink_chown("%s", "%s", %d, %d);' % (link_path, target_path, uid, gid))
 
   def PatchFile(self, target_path, zip_file, old_hash):
     self.script.append(
@@ -448,10 +445,16 @@ class EdifyGenerator(object):
     self.script.append(
         'chown("%s", %d, %d);' % (target_path, uid, gid))
 
-  def ChangeMetadata(self, target_path, uid, gid, mode, selabel, capabilities):
-    self.script.append(
-        'chmeta("%s", %d, %d, %o, "selabel", "%s", "capabilities", 0x%x);' %
-            (target_path, uid, gid, mode, selabel, capabilities))
+  def ChangeMetadata(self, fn, uid, gid, mode, selabel, capabilities):
+    """Set file ownership and permissions."""
+    if capabilities is None:
+      capabilities = "0x0"
+    cmd = 'set_metadata("%s", "uid", %d, "gid", %d, "mode", 0%o, ' \
+        '"capabilities", %s' % (fn, uid, gid, mode, capabilities)
+    if selabel is not None:
+      cmd += ', "selabel", "%s"' % selabel
+    cmd += ');'
+    self.script.append(cmd)
 
   def FileCheck(self, filename, sha1, error_msg):
     """Check that the given file has one of the
@@ -461,7 +464,7 @@ class EdifyGenerator(object):
   def AddPixelExperienceVersionAssertion(self, error_msg, source_version):
     prop_path = "/system/build.prop"
     source_version_prop = "org.pixelexperience.version.display"
-    self.script.append('assert(file_getprop("%s", "%s") == "%s" || abort("%s"));' % (prop_path, source_version_prop, source_version, error_msg))
+    self.script.append('assert(try_file_getprop("%s", "%s") == "%s" || abort("%s"));' % (prop_path, source_version_prop, source_version, error_msg))
 
   def AddPixelExperiencePatchAssertion(self, error_msg, files_to_patch):
     for file, sha1_hash in files_to_patch:
