@@ -1933,28 +1933,34 @@ def WriteFileIncrementalOTAPackage(target_zip, source_zip, output_file):
   if is_system_as_root:
     script.AppendExtra('mkdir("/system_root", "0", "0", "0700");')
     script.AppendExtra('symlink("system_root/system", "/system", "0", "0");')
-    script.AppendExtra('slotmount("target", "system", "/system_root", "%s", "rw");' % (system_fstype))
+    script.CheckAndUnmount("/system")
+    script.fstab["/system"].mount_point = "/system_root"
+    script.Mount("/system")
   else:
-    script.AppendExtra('mkdir("/system", "0", "0", "0700")')
-    script.AppendExtra('slotmount("target", "system", "/system", "%s", "rw");' % (system_fstype))
+    script.AppendExtra('mkdir("/system", "0", "0", "0700");')
+    script.CheckAndUnmount("/system")
+    script.Mount("/system")
 
   if HasVendorPartition(target_zip):
     vendor_src_partition = source_info["fstab"]["/vendor"]
     vendor_fstype = vendor_src_partition.fs_type
     script.AppendExtra('mkdir("/vendor", "0", "0", "0700");')
-    script.AppendExtra('slotmount("target", "vendor", "/vendor", "%s", "rw");' % (vendor_fstype))
+    script.CheckAndUnmount("/vendor")
+    script.Mount("/vendor")
 
   if HasProductPartition(target_zip):
     product_src_partition = source_info["fstab"]["/product"]
     product_fstype = product_src_partition.fs_type
     script.AppendExtra('mkdir("/product", "0", "0", "0700");')
-    script.AppendExtra('slotmount("target", "product", "/product", "%s", "rw");' % (product_fstype))
+    script.CheckAndUnmount("/product")
+    script.Mount("/product")
 
   if HasOdmPartition(target_zip):
     odm_src_partition = source_info["fstab"]["/odm"]
     odm_fstype = odm_src_partition.fs_type
     script.AppendExtra('mkdir("/odm", "0", "0", "0700");')
-    script.AppendExtra('slotmount("target", "odm", "/odm", "%s", "rw");' % (odm_fstype))
+    script.CheckAndUnmount("/odm")
+    script.Mount("/odm")
 
   system_diff.WriteScript(script, output_zip,
                           progress=0.8 if vendor_diff or product_diff or odm_diff else 0.9)
@@ -1968,21 +1974,8 @@ def WriteFileIncrementalOTAPackage(target_zip, source_zip, output_file):
   if odm_diff:
     odm_diff.WriteScript(script, output_zip, progress=0.1)
 
-  if is_system_as_root:
-    script.AppendExtra('slotunmount("target", "/system_root");')
-    script.AppendExtra('unlink("/system");')
-    script.AppendExtra('rmdir("/system_root");')
-  else:
-    script.AppendExtra('slotunmount("target", "/system");')
-    script.AppendExtra('rmdir("/system");')
-
-  if HasVendorPartition(target_zip):
-    script.AppendExtra('slotunmount("target", "/vendor");')
-    script.AppendExtra('rmdir("/vendor");')
-
-  if HasProductPartition(target_zip):
-    script.AppendExtra('slotunmount("target", "/product");')
-    script.AppendExtra('rmdir("/product");')
+  # Unmount everything
+  script.UnmountAll()
 
   if HasOdmPartition(target_zip):
     script.AppendExtra('slotunmount("target", "/odm");')
