@@ -1994,6 +1994,11 @@ def WriteFileIncrementalOTAPackage(target_zip, source_zip, output_file):
     script.AddToZip(target_zip, output_zip, input_path=OPTIONS.updater_binary)
   metadata["ota-required-cache"] = str(script.required_cache)
 
+  print("********************")
+  print("Printing script")
+  print("********************")
+  print(script.ToString())
+
   common.ZipWriteStr(output_zip, "system/build.prop",
                      ""+target_zip.read("SYSTEM/build.prop"))
 
