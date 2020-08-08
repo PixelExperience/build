@@ -1570,7 +1570,6 @@ def FinalizeMetadata(metadata, input_file, output_file, needed_property_files):
   if output_metadata_path:
     WriteMetadata(metadata, output_metadata_path)
 
-
 def WriteBlockIncrementalOTAPackage(target_zip, source_zip, output_file):
   target_info = BuildInfo(OPTIONS.target_info_dict, OPTIONS.oem_dicts)
   source_info = BuildInfo(OPTIONS.source_info_dict, OPTIONS.oem_dicts)
@@ -1614,11 +1613,7 @@ def WriteBlockIncrementalOTAPackage(target_zip, source_zip, output_file):
       "/tmp/boot.img", "boot.img", OPTIONS.source_tmp, "BOOT", source_info)
   target_boot = common.GetBootableImage(
       "/tmp/boot.img", "boot.img", OPTIONS.target_tmp, "BOOT", target_info)
-  updating_boot = (not OPTIONS.two_step and
-                   (source_boot.data != target_boot.data))
-
-  target_recovery = common.GetBootableImage(
-      "/tmp/recovery.img", "recovery.img", OPTIONS.target_tmp, "RECOVERY")
+  updating_boot = (source_boot.data != target_boot.data)
 
   block_diff_dict = GetBlockDifferences(target_zip=target_zip,
                                         source_zip=source_zip,
@@ -1626,63 +1621,22 @@ def WriteBlockIncrementalOTAPackage(target_zip, source_zip, output_file):
                                         source_info=source_info,
                                         device_specific=device_specific)
 
-  AddCompatibilityArchiveIfTrebleEnabled(
-      target_zip, output_zip, target_info, source_info)
-
   # Assertions (e.g. device properties check).
   target_info.WriteDeviceAssertions(script, OPTIONS.oem_no_mount)
   device_specific.IncrementalOTA_Assertions()
 
-  # Two-step incremental package strategy (in chronological order,
-  # which is *not* the order in which the generated script has
-  # things):
-  #
-  # if stage is not "2/3" or "3/3":
-  #    do verification on current system
-  #    write recovery image to boot partition
-  #    set stage to "2/3"
-  #    reboot to boot partition and restart recovery
-  # else if stage is "2/3":
-  #    write recovery image to recovery partition
-  #    set stage to "3/3"
-  #    reboot to recovery partition and restart recovery
-  # else:
-  #    (stage must be "3/3")
-  #    perform update:
-  #       patch system files, etc.
-  #       force full install of new boot image
-  #       set up system to update recovery partition on first boot
-  #    complete script normally
-  #    (allow recovery to mark itself finished and reboot)
-
-  if OPTIONS.two_step:
-    if not source_info.get("multistage_support"):
-      assert False, "two-step packages not supported by this build"
-    fs = source_info["fstab"]["/misc"]
-    assert fs.fs_type.upper() == "EMMC", \
-        "two-step packages only supported on devices with EMMC /misc partitions"
-    bcb_dev = {"bcb_dev" : fs.device}
-    common.ZipWriteStr(output_zip, "recovery.img", target_recovery.data)
-    script.AppendExtra("""
-if get_stage("%(bcb_dev)s") == "2/3" then
-""" % bcb_dev)
-
-    # Stage 2/3: Write recovery image to /recovery (currently running /boot).
-    script.Comment("Stage 2/3")
-    script.AppendExtra("sleep(20);\n")
-    script.WriteRawImage("/recovery", "recovery.img")
-    script.AppendExtra("""
-set_stage("%(bcb_dev)s", "3/3");
-reboot_now("%(bcb_dev)s", "recovery");
-else if get_stage("%(bcb_dev)s") != "3/3" then
-""" % bcb_dev)
-
-    # Stage 1/3: (a) Verify the current system.
-    script.Comment("Stage 1/3")
-
-  # Dump fingerprints
-  script.Print("Source: {}".format(source_info.fingerprint))
-  script.Print("Target: {}".format(target_info.fingerprint))
+  is_plus = target_info.GetBuildProp("org.pixelexperience.version").endswith("_plus") == False
+  android_version = target_info.GetBuildProp("ro.build.version.release")
+  build_id = target_info.GetBuildProp("ro.build.id")
+  build_date = target_info.GetBuildProp("org.pixelexperience.build_date")
+  security_patch = target_info.GetBuildProp("ro.build.version.security_patch")
+  device = target_info.GetBuildProp("org.pixelexperience.device")
+  prev_build_id = source_info.GetBuildProp("ro.build.id")
+  prev_build_date = source_info.GetBuildProp("org.pixelexperience.build_date")
+  prev_security_patch = source_info.GetBuildProp("ro.build.version.security_patch")
+  script.PrintPixelExperienceBanner(is_plus, android_version, build_id, build_date,
+                                  security_patch, device, prev_build_id,
+                                  prev_build_date, prev_security_patch)
 
   CopyInstallTools(output_zip)
   script.UnpackPackageDir("install", "/tmp/install")
@@ -1693,34 +1647,26 @@ else if get_stage("%(bcb_dev)s") != "3/3" then
 
   device_specific.IncrementalOTA_VerifyBegin()
 
-  WriteFingerprintAssertion(script, target_info, source_info)
+  # Mount system
+  system_src_partition = source_info["fstab"]["/system"]
+  system_fstype = system_src_partition.fs_type
+  script.CheckAndUnmount("/system_root")
+  script.CheckAndUnmount("/system")
+  script.AppendExtra('mkdir("/system_root", "0", "0", "0700");')
+  script.AppendExtra('symlink("system_root/system", "/system", "0", "0");')
+  script.AppendExtra('symlink("system_root", "/root", "0", "0");')
+  script.fstab["/system"].mount_point = "/system_root"
+  script.Mount("/system")
+
+  source_version = os.path.splitext(os.path.basename(OPTIONS.incremental_source))[0]
+  error_msg = "Failed to apply update, please download full package at https://download.pixelexperience.org/" + device
+  script.AddPixelExperienceVersionAssertion(error_msg, source_version)
 
   # Check the required cache size (i.e. stashed blocks).
   required_cache_sizes = [diff.required_cache for diff in
                           block_diff_dict.values()]
-  if updating_boot:
-    boot_type, boot_device = common.GetTypeAndDevice("/boot", source_info)
-    d = common.Difference(target_boot, source_boot)
-    _, _, d = d.ComputePatch()
-    if d is None:
-      include_full_boot = True
-      common.ZipWriteStr(output_zip, "boot.img", target_boot.data)
-    else:
-      include_full_boot = False
 
-      logger.info(
-          "boot      target: %d  source: %d  diff: %d", target_boot.size,
-          source_boot.size, len(d))
-
-      common.ZipWriteStr(output_zip, "boot.img.p", d)
-
-      script.PatchPartitionCheck(
-          "{}:{}:{}:{}".format(
-              boot_type, boot_device, target_boot.size, target_boot.sha1),
-          "{}:{}:{}:{}".format(
-              boot_type, boot_device, source_boot.size, source_boot.sha1))
-
-      required_cache_sizes.append(target_boot.size)
+  required_cache_sizes.append(target_boot.size)
 
   if required_cache_sizes:
     script.CacheFreeSpaceCheck(max(required_cache_sizes))
@@ -1730,21 +1676,6 @@ else if get_stage("%(bcb_dev)s") != "3/3" then
     diff.WriteVerifyScript(script, touched_blocks_only=True)
 
   device_specific.IncrementalOTA_VerifyEnd()
-
-  if OPTIONS.two_step:
-    # Stage 1/3: (b) Write recovery image to /boot.
-    _WriteRecoveryImageToBoot(script, output_zip)
-
-    script.AppendExtra("""
-set_stage("%(bcb_dev)s", "2/3");
-reboot_now("%(bcb_dev)s", "");
-else
-""" % bcb_dev)
-
-    # Stage 3/3: Make changes.
-    script.Comment("Stage 3/3")
-
-  script.Comment("---- start making changes here ----")
 
   device_specific.IncrementalOTA_InstallBegin()
 
@@ -1768,32 +1699,9 @@ else
                              progress=progress_dict.get(block_diff.partition),
                              write_verify_script=OPTIONS.verify)
 
-  if OPTIONS.two_step:
-    common.ZipWriteStr(output_zip, "boot.img", target_boot.data)
+  if updating_boot:
     script.WriteRawImage("/boot", "boot.img")
-    logger.info("writing full boot image (forced by two-step mode)")
-
-  if not OPTIONS.two_step:
-    if updating_boot:
-      if include_full_boot:
-        logger.info("boot image changed; including full.")
-        script.Print("Installing boot image...")
-        script.WriteRawImage("/boot", "boot.img")
-      else:
-        # Produce the boot image by applying a patch to the current
-        # contents of the boot partition, and write it back to the
-        # partition.
-        logger.info("boot image changed; including patch.")
-        script.Print("Patching boot image...")
-        script.ShowProgress(0.1, 10)
-        script.PatchPartition(
-            '{}:{}:{}:{}'.format(
-                boot_type, boot_device, target_boot.size, target_boot.sha1),
-            '{}:{}:{}:{}'.format(
-                boot_type, boot_device, source_boot.size, source_boot.sha1),
-            'boot.img.p')
-    else:
-      logger.info("boot image unchanged; skipping.")
+    common.ZipWriteStr(output_zip, "boot.img", target_boot.data)
 
   # Do device-specific installation (eg, write radio image).
   device_specific.IncrementalOTA_InstallEnd()
@@ -1801,24 +1709,10 @@ else
   if OPTIONS.extra_script is not None:
     script.AppendExtra(OPTIONS.extra_script)
 
-  if OPTIONS.wipe_user_data:
-    script.Print("Erasing user data...")
-    script.FormatPartition("/data")
-
-  if OPTIONS.two_step:
-    script.AppendExtra("""
-set_stage("%(bcb_dev)s", "");
-endif;
-endif;
-""" % bcb_dev)
-
   script.SetProgress(1)
-  # For downgrade OTAs, we prefer to use the update-binary in the source
-  # build that is actually newer than the one in the target build.
-  if OPTIONS.downgrade:
-    script.AddToZip(source_zip, output_zip, input_path=OPTIONS.updater_binary)
-  else:
-    script.AddToZip(target_zip, output_zip, input_path=OPTIONS.updater_binary)
+  script.Print("Success!")
+
+  script.AddToZip(target_zip, output_zip, input_path=OPTIONS.updater_binary)
   metadata["ota-required-cache"] = str(script.required_cache)
 
   # We haven't written the metadata entry yet, which will be handled in
@@ -1875,9 +1769,6 @@ def WriteFileIncrementalOTAPackage(target_zip, source_zip, output_file):
       "/tmp/boot.img", "boot.img", OPTIONS.target_tmp, "BOOT", target_info)
   updating_boot = (source_boot.data != target_boot.data)
 
-  target_recovery = common.GetBootableImage(
-      "/tmp/recovery.img", "recovery.img", OPTIONS.target_tmp, "RECOVERY")
-
   system_diff = common.FileSystemDifference("system", target_zip, source_zip)
   root_diff = common.FileSystemDifference("root", target_zip, source_zip)
 
@@ -1902,32 +1793,33 @@ def WriteFileIncrementalOTAPackage(target_zip, source_zip, output_file):
   else:
     odm_diff = None
 
-  AddCompatibilityArchiveIfTrebleEnabled(
-      target_zip, output_zip, target_info, source_info)
-
   # Assertions (e.g. device properties check).
   target_info.WriteDeviceAssertions(script, OPTIONS.oem_no_mount)
   device_specific.IncrementalOTA_Assertions()
 
-  # Dump fingerprints
-  script.Print("Source: {}".format(source_info.fingerprint))
-  script.Print("Target: {}".format(target_info.fingerprint))
+  is_plus = target_info.GetBuildProp("org.pixelexperience.version").endswith("_plus") == False
+  android_version = target_info.GetBuildProp("ro.build.version.release")
+  build_id = target_info.GetBuildProp("ro.build.id")
+  build_date = target_info.GetBuildProp("org.pixelexperience.build_date")
+  security_patch = target_info.GetBuildProp("ro.build.version.security_patch")
+  device = target_info.GetBuildProp("org.pixelexperience.device")
+  prev_build_id = source_info.GetBuildProp("ro.build.id")
+  prev_build_date = source_info.GetBuildProp("org.pixelexperience.build_date")
+  prev_security_patch = source_info.GetBuildProp("ro.build.version.security_patch")
+  script.PrintPixelExperienceBanner(is_plus, android_version, build_id, build_date,
+                                  security_patch, device, prev_build_id,
+                                  prev_build_date, prev_security_patch)
 
   CopyInstallTools(output_zip)
   script.UnpackPackageDir("install", "/tmp/install")
   script.SetPermissionsRecursive("/tmp/install", 0, 0, 0o755, 0o644, None, None)
   script.SetPermissionsRecursive("/tmp/install/bin", 0, 0, 0o755, 0o755, None, None)
 
+  script.Print("Verifying current system...")
+
   device_specific.IncrementalOTA_VerifyBegin()
 
-  WriteFingerprintAssertion(script, target_info, source_info)
-
-  device_specific.IncrementalOTA_VerifyEnd()
-
-  script.Comment("---- start making changes here ----")
-
-  device_specific.IncrementalOTA_InstallBegin()
-
+  # Mount system
   system_src_partition = source_info["fstab"]["/system"]
   system_fstype = system_src_partition.fs_type
   script.CheckAndUnmount("/system_root")
@@ -1937,6 +1829,14 @@ def WriteFileIncrementalOTAPackage(target_zip, source_zip, output_file):
   script.AppendExtra('symlink("system_root", "/root", "0", "0");')
   script.fstab["/system"].mount_point = "/system_root"
   script.Mount("/system")
+
+  source_version = os.path.splitext(os.path.basename(OPTIONS.incremental_source))[0]
+  error_msg = "Failed to apply update, please download full package at https://download.pixelexperience.org/" + device
+  script.AddPixelExperienceVersionAssertion(error_msg, source_version)
+
+  device_specific.IncrementalOTA_VerifyEnd()
+
+  device_specific.IncrementalOTA_InstallBegin()
 
   if HasVendorPartition(target_zip):
     vendor_src_partition = source_info["fstab"]["/vendor"]
@@ -1978,12 +1878,8 @@ def WriteFileIncrementalOTAPackage(target_zip, source_zip, output_file):
   script.UnmountAll()
 
   if updating_boot:
-    print("boot image changed; including full.")
-    script.Print("Installing boot image...")
     script.WriteRawImage("/boot", "boot.img")
     common.ZipWriteStr(output_zip, "boot.img", target_boot.data)
-  else:
-    print("boot image unchanged; skipping.")
 
   # Do device-specific installation (eg, write radio image).
   device_specific.IncrementalOTA_InstallEnd()
@@ -1991,17 +1887,10 @@ def WriteFileIncrementalOTAPackage(target_zip, source_zip, output_file):
   if OPTIONS.extra_script is not None:
     script.AppendExtra(OPTIONS.extra_script)
 
-  if OPTIONS.wipe_user_data:
-    script.Print("Erasing user data...")
-    script.FormatPartition("/data")
-
   script.SetProgress(1)
-  # For downgrade OTAs, we prefer to use the update-binary in the source
-  # build that is actually newer than the one in the target build.
-  if OPTIONS.downgrade:
-    script.AddToZip(source_zip, output_zip, input_path=OPTIONS.updater_binary)
-  else:
-    script.AddToZip(target_zip, output_zip, input_path=OPTIONS.updater_binary)
+  script.Print("Success!")
+
+  script.AddToZip(target_zip, output_zip, input_path=OPTIONS.updater_binary)
   metadata["ota-required-cache"] = str(script.required_cache)
 
   common.ZipWriteStr(output_zip, "system/build.prop",
