@@ -428,10 +428,6 @@ class EdifyGenerator(object):
     self.script.append(
         'symlink("%s", "%s", %d, %d);' % (link_path, target_path, uid, gid))
 
-  def PatchFile(self, target_path, zip_file, old_hash):
-    self.script.append(
-        'patch("%s", "%s", "%s");' % (target_path, zip_file, old_hash))
-
   def DeleteFile(self, target_path):
     self.script.append(
         'unlink("%s");' % (target_path))

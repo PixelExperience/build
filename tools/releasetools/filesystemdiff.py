@@ -24,9 +24,7 @@ import multiprocessing
 import os
 import os.path
 import re
-import subprocess
 import sys
-import threading
 from collections import deque, OrderedDict
 from hashlib import sha1
 import zipfile
@@ -42,25 +40,6 @@ def DataHash(data):
   hasher = sha1()
   hasher.update(data)
   return hasher.hexdigest()
-
-def ComputePatch(src_data, tgt_data):
-  src_filename = common.MakeTempFile(prefix='src-')
-  f = open(src_filename, 'w')
-  f.write(src_data)
-  f.close()
-  tgt_filename = common.MakeTempFile(prefix='tgt-')
-  f = open(tgt_filename, 'w')
-  f.write(tgt_data)
-  f.close()
-  patch_filename = common.MakeTempFile(prefix='patch-')
-
-  diff_argv = ['bsdiff', src_filename, tgt_filename, patch_filename]
-  child = subprocess.Popen(diff_argv, stdout=None, stderr=None)
-  child.communicate()
-  if child.returncode != 0:
-    raise RuntimeError("Failed to run %s" % (" ".join(diff_argv)))
-
-  return patch_filename
 
 class FsNode(object):
   S_IFCHR = 0020000 # Unsupported
@@ -385,15 +364,19 @@ class FileSystemDiff(object):
           self.script.ChangeOwner(fs_filename, tgt_file.uid(), tgt_file.gid())
       else:
         zip_filename = "%s%s" % (self.zip_partition, filename)
-        zip_patch_filename = "%s.patch" % (fs_filename[1:])
+        zip_data_filename = fs_filename[1:]
         src_data = self.src_zip.open(zip_filename).read()
-        src_hash = DataHash(src_data)
         tgt_data = self.tgt_zip.open(zip_filename).read()
-        tgt_hash = DataHash(tgt_data)
         if src_data != tgt_data:
-          patch_filename = ComputePatch(src_data, tgt_data)
-          self.script.PatchFile(fs_filename, zip_patch_filename, src_hash)
-          self.out_zip.write(patch_filename, zip_patch_filename)
+          buf = self.tgt_zip.open(zip_filename).read()
+          extracted_filename = common.MakeTempFile(prefix='extract-')
+          f = open(extracted_filename, 'w')
+          f.write(buf)
+          f.close()
+          self.script.CreateFile(fs_filename, zip_data_filename,
+              tgt_file.uid(), tgt_file.gid(), tgt_file.mode(),
+              tgt_file.selabel(), tgt_file.capabilities())
+          self.out_zip.write(extracted_filename, zip_data_filename)
         if (src_file.uid() != tgt_file.uid() or
             src_file.gid() != tgt_file.gid() or
             src_file.mode() != tgt_file.mode() or
