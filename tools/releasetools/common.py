@@ -2225,10 +2225,14 @@ class FileSystemDifference(object):
     self.partition = partition
     self.diff = filesystemdiff.FileSystemDiff(partition, tgt, src, threads=OPTIONS.worker_threads)
 
+    partition_ = partition
+    if partition_ == 'root':
+      partition_ = "system"
+
     if src is None:
-      _, self.device = GetTypeAndDevice("/" + partition, OPTIONS.info_dict)
+      _, self.device = GetTypeAndDevice("/" + partition_, OPTIONS.info_dict)
     else:
-      _, self.device = GetTypeAndDevice("/" + partition,
+      _, self.device = GetTypeAndDevice("/" + partition_,
                                         OPTIONS.source_info_dict)
 
   def WriteScript(self, script, output_zip, progress=None):
