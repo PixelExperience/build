@@ -1888,11 +1888,23 @@ def WriteFileIncrementalOTAPackage(target_zip, source_zip, output_file):
   if HasVendorPartition(target_zip):
     if not HasVendorPartition(source_zip):
       raise RuntimeError("can't generate incremental that adds /vendor")
-
     vendor_diff = common.FileSystemDifference("vendor", target_zip, source_zip)
-
   else:
     vendor_diff = None
+
+  if HasProductPartition(target_zip):
+    if not HasProductPartition(source_zip):
+      raise RuntimeError("can't generate incremental that adds /product")
+    product_diff = common.FileSystemDifference("product", target_zip, source_zip)
+  else:
+    product_diff = None
+
+  if HasOdmPartition(target_zip):
+    if not HasOdmPartition(source_zip):
+      raise RuntimeError("can't generate incremental that adds /odm")
+    odm_diff = common.FileSystemDifference("odm", target_zip, source_zip)
+  else:
+    odm_diff = None
 
   AddCompatibilityArchiveIfTrebleEnabled(
       target_zip, output_zip, target_info, source_info)
@@ -1935,11 +1947,29 @@ def WriteFileIncrementalOTAPackage(target_zip, source_zip, output_file):
     script.AppendExtra('mkdir("/vendor", "0", "0", "0700");')
     script.AppendExtra('slotmount("target", "vendor", "/vendor", "%s", "rw");' % (vendor_fstype))
 
+  if HasProductPartition(target_zip):
+    product_src_partition = source_info["fstab"]["/product"]
+    product_fstype = product_src_partition.fs_type
+    script.AppendExtra('mkdir("/product", "0", "0", "0700");')
+    script.AppendExtra('slotmount("target", "product", "/product", "%s", "rw");' % (product_fstype))
+
+  if HasOdmPartition(target_zip):
+    odm_src_partition = source_info["fstab"]["/odm"]
+    odm_fstype = odm_src_partition.fs_type
+    script.AppendExtra('mkdir("/odm", "0", "0", "0700");')
+    script.AppendExtra('slotmount("target", "odm", "/odm", "%s", "rw");' % (odm_fstype))
+
   system_diff.WriteScript(script, output_zip,
-                          progress=0.8 if vendor_diff else 0.9)
+                          progress=0.8 if vendor_diff or product_diff or odm_diff else 0.9)
 
   if vendor_diff:
     vendor_diff.WriteScript(script, output_zip, progress=0.1)
+
+  if product_diff:
+    product_diff.WriteScript(script, output_zip, progress=0.1)
+
+  if odm_diff:
+    odm_diff.WriteScript(script, output_zip, progress=0.1)
 
   if is_system_as_root:
     script.AppendExtra('slotunmount("target", "/system_root");')
@@ -1952,6 +1982,14 @@ def WriteFileIncrementalOTAPackage(target_zip, source_zip, output_file):
   if HasVendorPartition(target_zip):
     script.AppendExtra('slotunmount("target", "/vendor");')
     script.AppendExtra('rmdir("/vendor");')
+
+  if HasProductPartition(target_zip):
+    script.AppendExtra('slotunmount("target", "/product");')
+    script.AppendExtra('rmdir("/product");')
+
+  if HasOdmPartition(target_zip):
+    script.AppendExtra('slotunmount("target", "/odm");')
+    script.AppendExtra('rmdir("/odm");')
 
   if updating_boot:
     print("boot image changed; including full.")
