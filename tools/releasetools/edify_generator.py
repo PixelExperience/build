@@ -453,7 +453,16 @@ class EdifyGenerator(object):
         'chmeta("%s", %d, %d, %o, "selabel", "%s", "capabilities", 0x%x);' %
             (target_path, uid, gid, mode, selabel, capabilities))
 
+  def FileCheck(self, filename, sha1, error_msg):
+    """Check that the given file has one of the
+    given sha1 hashes."""
+    self.script.append('assert(sha1_check(read_file("%s"), "%s") || abort("%s"));' % (filename, sha1, error_msg))
+
   def AddPixelExperienceVersionAssertion(self, error_msg, source_version):
     prop_path = "/system/build.prop"
     source_version_prop = "org.pixelexperience.version.display"
     self.script.append('assert(file_getprop("%s", "%s") == "%s" || abort("%s"));' % (prop_path, source_version_prop, source_version, error_msg))
+
+  def AddPixelExperiencePatchAssertion(self, error_msg, files_to_patch):
+    for file, sha1_hash in files_to_patch:
+      self.FileCheck(file, sha1_hash, error_msg)
