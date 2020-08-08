@@ -480,6 +480,9 @@ endif
 $(INSTALLED_BUILD_PROP_TARGET): $(intermediate_system_build_prop) $(INSTALLED_RECOVERYIMAGE_TARGET)
 	@echo "Target build info: $@"
 	$(hide) grep -v 'ro.product.first_api_level' $(intermediate_system_build_prop) > $@
+ifeq (true,$(TARGET_USES_AOSP_RECOVERY))
+	$(hide) echo persist.sys.recovery_update=true >> $@
+endif
 
 # -----------------------------------------------------------------
 # vendor build.prop
