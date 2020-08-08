@@ -358,9 +358,15 @@ class EdifyGenerator(object):
     """Append text verbatim to the output script."""
     self.script.append(extra)
 
+  def CheckAndUnmount(self, mount_point):
+    self.script.append('ifelse(is_mounted("{0}"), unmount("{0}"));'.format(mount_point))
+    if mount_point in self.mounts:
+      self.mounts.remove(mount_point)
+
   def Unmount(self, mount_point):
     self.script.append('unmount("%s");' % mount_point)
-    self.mounts.remove(mount_point)
+    if mount_point in self.mounts:
+      self.mounts.remove(mount_point)
 
   def UnmountAll(self):
     for p in sorted(self.mounts):
