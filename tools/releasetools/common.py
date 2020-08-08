@@ -2235,10 +2235,7 @@ class FileSystemDifference(object):
       _, self.device = GetTypeAndDevice("/" + partition_,
                                         OPTIONS.source_info_dict)
 
-  def WriteScript(self, script, output_zip, progress=None, show_info=True):
-    if show_info:
-      script.Print("Updating %s." % (self.partition,))
-
+  def WriteScript(self, script, output_zip, progress=None:
     if progress:
       script.ShowProgress(progress, 0)
 
