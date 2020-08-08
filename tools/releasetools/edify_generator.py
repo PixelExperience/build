@@ -434,7 +434,7 @@ class EdifyGenerator(object):
 
   def CreateSymbolicLink(self, link_path, target_path, uid, gid):
     self.script.append(
-        'symlink("%s", "%s", %d, %d);' % (link_path, target_path, uid, gid))
+        'symlink_chown("%s", "%s", %d, %d);' % (link_path, target_path, uid, gid))
 
   def PatchFile(self, target_path, zip_file, old_hash):
     self.script.append(
@@ -461,7 +461,7 @@ class EdifyGenerator(object):
   def AddPixelExperienceVersionAssertion(self, error_msg, source_version):
     prop_path = "/system/build.prop"
     source_version_prop = "org.pixelexperience.version.display"
-    self.script.append('assert(file_getprop("%s", "%s") == "%s" || abort("%s"));' % (prop_path, source_version_prop, source_version, error_msg))
+    self.script.append('assert(try_file_getprop("%s", "%s") == "%s" || abort("%s"));' % (prop_path, source_version_prop, source_version, error_msg))
 
   def AddPixelExperiencePatchAssertion(self, error_msg, files_to_patch):
     for file, sha1_hash in files_to_patch:
