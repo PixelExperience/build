@@ -1653,10 +1653,10 @@ def WriteBlockIncrementalOTAPackage(target_zip, source_zip, output_file):
   script.CheckAndUnmount("/system_root")
   script.CheckAndUnmount("/system")
   script.AppendExtra('mkdir("/system_root", "0", "0", "0700");')
-  script.AppendExtra('symlink("system_root/system", "/system", "0", "0");')
-  script.AppendExtra('symlink("system_root", "/root", "0", "0");')
   script.fstab["/system"].mount_point = "/system_root"
   script.Mount("/system")
+  script.CreateSymbolicLink("system_root/system", "/system", 0, 0)
+  script.CreateSymbolicLink("system_root", "/root", 0, 0)
 
   source_version = os.path.splitext(os.path.basename(OPTIONS.incremental_source))[0]
   error_msg = "Failed to apply update, please download full package at https://download.pixelexperience.org/" + device
@@ -1835,10 +1835,10 @@ def WriteFileIncrementalOTAPackage(target_zip, source_zip, output_file):
   script.CheckAndUnmount("/system_root")
   script.CheckAndUnmount("/system")
   script.AppendExtra('mkdir("/system_root", "0", "0", "0700");')
-  script.AppendExtra('symlink("system_root/system", "/system", "0", "0");')
-  script.AppendExtra('symlink("system_root", "/root", "0", "0");')
   script.fstab["/system"].mount_point = "/system_root"
   script.Mount("/system")
+  script.CreateSymbolicLink("system_root/system", "/system", 0, 0)
+  script.CreateSymbolicLink("system_root", "/root", 0, 0)
 
   source_version = os.path.splitext(os.path.basename(OPTIONS.incremental_source))[0]
   error_msg = "Failed to apply update, please download full package at https://download.pixelexperience.org/" + device
