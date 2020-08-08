@@ -1874,6 +1874,7 @@ def WriteFileIncrementalOTAPackage(target_zip, source_zip, output_file):
       "/tmp/recovery.img", "recovery.img", OPTIONS.target_tmp, "RECOVERY")
 
   system_diff = common.FileSystemDifference("system", target_zip, source_zip)
+  root_diff = common.FileSystemDifference("root", target_zip, source_zip)
 
   if HasVendorPartition(target_zip):
     if not HasVendorPartition(source_zip):
@@ -1917,20 +1918,15 @@ def WriteFileIncrementalOTAPackage(target_zip, source_zip, output_file):
 
   device_specific.IncrementalOTA_InstallBegin()
 
-  is_system_as_root = target_info.get("system_root_image") == "true"
-
   system_src_partition = source_info["fstab"]["/system"]
   system_fstype = system_src_partition.fs_type
-  if is_system_as_root:
-    script.AppendExtra('mkdir("/system_root", "0", "0", "0700");')
-    script.AppendExtra('symlink("system_root/system", "/system", "0", "0");')
-    script.CheckAndUnmount("/system")
-    script.fstab["/system"].mount_point = "/system_root"
-    script.Mount("/system")
-  else:
-    script.AppendExtra('mkdir("/system", "0", "0", "0700");')
-    script.CheckAndUnmount("/system")
-    script.Mount("/system")
+  script.CheckAndUnmount("/system_root")
+  script.CheckAndUnmount("/system")
+  script.AppendExtra('mkdir("/system_root", "0", "0", "0700");')
+  script.AppendExtra('symlink("system_root/system", "/system", "0", "0");')
+  script.AppendExtra('symlink("system_root", "/root", "0", "0");')
+  script.fstab["/system"].mount_point = "/system_root"
+  script.Mount("/system")
 
   if HasVendorPartition(target_zip):
     vendor_src_partition = source_info["fstab"]["/vendor"]
@@ -1954,7 +1950,10 @@ def WriteFileIncrementalOTAPackage(target_zip, source_zip, output_file):
     script.Mount("/odm")
 
   system_diff.WriteScript(script, output_zip,
-                          progress=0.8 if vendor_diff or product_diff or odm_diff else 0.9)
+                          progress=0.8)
+
+  root_diff.WriteScript(script, output_zip,
+                          progress=None, show_info=False)
 
   if vendor_diff:
     vendor_diff.WriteScript(script, output_zip, progress=0.1)
