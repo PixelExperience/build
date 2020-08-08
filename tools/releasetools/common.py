@@ -2236,8 +2236,6 @@ class FileSystemDifference(object):
                                         OPTIONS.source_info_dict)
 
   def WriteScript(self, script, output_zip, progress=None):
-    script.Print("Updating %s." % (self.partition,))
-
     if progress:
       script.ShowProgress(progress, 0)
 
