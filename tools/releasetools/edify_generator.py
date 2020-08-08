@@ -245,7 +245,8 @@ class EdifyGenerator(object):
     self.script.append('ui_print("%s");' % (message,))
 
   def PrintPixelExperienceBanner(self, is_plus, android_version, build_id, build_date,
-                                  security_patch, device):
+                                  security_patch, device, prev_build_id=None,
+                                  prev_build_date=None, prev_security_patch=None):
     self.Print("----------------------------------------------")
     if is_plus:
       self.Print("        PixelExperience (Plus edition)")
@@ -255,9 +256,18 @@ class EdifyGenerator(object):
       self.Print("              by jhenrique09")
     self.Print("----------------------------------------------")
     self.Print(" Android version: %s"%(android_version))
-    self.Print(" Build id: %s"%(build_id))
-    self.Print(" Build date: %s"%(build_date))
-    self.Print(" Security patch: %s"%(security_patch))
+    if prev_build_id != None and prev_build_id != build_id:
+      self.Print(" Build id: %s -> %s"%(prev_build_id, build_id))
+    else:
+      self.Print(" Build id: %s"%(build_id))
+    if prev_build_date != None and prev_build_date != build_date:
+      self.Print(" Build date: %s -> %s"%(prev_build_date, build_date))
+    else:
+      self.Print(" Build date: %s"%(build_date))
+    if prev_security_patch != None and prev_security_patch != security_patch:
+      self.Print(" Security patch: %s -> %s"%(prev_security_patch, security_patch))
+    else:
+      self.Print(" Security patch: %s"%(security_patch))
     self.Print(" Device: %s"%(device))
     self.Print("----------------------------------------------")
 
@@ -442,3 +452,8 @@ class EdifyGenerator(object):
     self.script.append(
         'chmeta("%s", %d, %d, %o, "selabel", "%s", "capabilities", 0x%x);' %
             (target_path, uid, gid, mode, selabel, capabilities))
+
+  def AddPixelExperienceVersionAssertion(self, error_msg, source_version):
+    prop_path = "/system/build.prop"
+    source_version_prop = "org.pixelexperience.version.display"
+    self.script.append('assert(file_getprop("%s", "%s") == "%s" || abort("%s"));' % (prop_path, source_version_prop, source_version, error_msg))
