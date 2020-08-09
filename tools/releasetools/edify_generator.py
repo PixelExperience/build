@@ -385,15 +385,9 @@ class EdifyGenerator(object):
     """Append text verbatim to the output script."""
     self.script.append(extra)
 
-  def CheckAndUnmount(self, mount_point):
-    self.script.append('ifelse(is_mounted("{0}"), unmount("{0}"));'.format(mount_point))
-    if mount_point in self.mounts:
-      self.mounts.remove(mount_point)
-
   def Unmount(self, mount_point):
     self.script.append('unmount("%s");' % mount_point)
-    if mount_point in self.mounts:
-      self.mounts.remove(mount_point)
+    self.mounts.remove(mount_point)
 
   def UnmountAll(self):
     for p in sorted(self.mounts):
@@ -452,6 +446,20 @@ class EdifyGenerator(object):
     self.script.append(
         'chmeta("%s", %d, %d, %o, "selabel", "%s", "capabilities", 0x%x);' %
             (target_path, uid, gid, mode, selabel, capabilities))
+
+  def FileCheck(self, filename, sha1, error_msg):
+    """Check that the given file has one of the
+    given sha1 hashes."""
+    self.script.append('assert(sha1_check(read_file("%s"), "%s") || abort("%s"));' % (filename, sha1, error_msg))
+
+  def RunSetupBusybox(self):
+    self.script.append('run_program("/sbin/sh", "/tmp/install/bin/setup_busybox.sh");')
+
+  def RunMountAll(self):
+    self.script.append('run_program("/sbin/sh", "/tmp/install/bin/mount_all.sh");')
+
+  def RunUmountAll(self):
+    self.script.append('run_program("/sbin/sh", "/tmp/install/bin/umount_all.sh");')
 
   def FileCheck(self, filename, sha1, error_msg):
     """Check that the given file has one of the
