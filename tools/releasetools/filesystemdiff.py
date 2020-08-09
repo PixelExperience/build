@@ -295,6 +295,15 @@ class FileSystemDiff(object):
     self.files_to_patch = None
 
     self.partition = partition
+    self.zip_partition = self.partition.upper()
+
+    if self.partition == 'system':
+      self.fs_root = "/%s" % ('system_root/system')
+    elif self.partition == 'root':
+      self.fs_root = "/%s" % ('system_root')
+    else:
+      self.fs_root = "/%s" % (self.partition)
+
     self.tgt_zip = tgt
     self.tgt_fs = FileSystem.from_target_files_zip(self.tgt_zip, partition)
     if src is None:
@@ -305,15 +314,19 @@ class FileSystemDiff(object):
       self.src_fs = FileSystem.from_target_files_zip(self.src_zip, partition)
 
   def shouldPatchFile(self, file):
-    dont_patch = ['/system/bin/recovery-persist', '/system/bin/install-recovery.sh',
-                    '/system/recovery-from-boot.p', '/system/etc/Changelog.txt',
-                    '/system/etc/NOTICE.xml.gz', '/system/etc/recovery-resource.dat']
-    if file.startswith('/root/'):
+    dont_patch = ['/system_root/system/bin/recovery-persist',
+                    '/system_root/system/bin/install-recovery.sh',
+                    '/system_root/system/recovery-from-boot.p',
+                    '/system_root/system/etc/Changelog.txt',
+                    '/system_root/system/etc/NOTICE.xml.gz',
+                    '/system_root/system/etc/recovery-resource.dat']
+    if (file.startswith('/system_root/') and
+        file.startswith('/system_root/system/') == False):
       print("Not patching file from root partition: " + file)
     elif file.endswith('.prop'):
       print("Not patching .prop file: " + file)
-    elif file.startswith('/system/etc/security/'):
-      print("Not patching /system/etc/security/*")
+    elif file.startswith('/system_root/system/etc/security/'):
+      print("Not patching /system_root/system/etc/security/*")
     elif file.endswith('prop.default'):
       print("Not patching prop.default file: " + file)
     elif file in dont_patch:
@@ -327,8 +340,6 @@ class FileSystemDiff(object):
     if self.files_to_patch is not None:
       return self.files_to_patch
     self.files_to_patch = []
-    self.zip_partition = self.partition.upper()
-    self.fs_root = "/%s" % (self.partition)
     self._GetFilesToPatch('', self.tgt_fs.root(), self.src_fs.root())
     return self.files_to_patch
 
@@ -544,7 +555,4 @@ class FileSystemDiff(object):
       raise ValueError('files_to_patch is not defined, please call GetFilesToPatch first')
     self.script = script
     self.out_zip = out
-
-    self.zip_partition = self.partition.upper()
-    self.fs_root = "/%s" % (self.partition)
     self._Compute('', self.tgt_fs.root(), self.src_fs.root())
