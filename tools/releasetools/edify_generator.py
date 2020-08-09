@@ -414,7 +414,7 @@ class EdifyGenerator(object):
 
   def CreateDirectory(self, target_path, uid, gid, mode, selabel, capabilities):
     self.script.append(
-        'mkdir("%s", %d, %d, %o, "selabel", "%s", "capabilities", 0x%x);' %
+        'mkdir("%s", %d, %d, 0%o, "selabel", "%s", "capabilities", 0x%x);' %
             (target_path, uid, gid, mode, selabel, capabilities))
 
   def DeleteDirectory(self, target_path):
@@ -423,7 +423,7 @@ class EdifyGenerator(object):
 
   def CreateFile(self, target_path, zip_file, uid, gid, mode, selabel, capabilities):
     self.script.append(
-        'create("%s", "%s", %d, %d, %o, "selabel", %s, "capabilities", 0x%x);' %
+        'create("%s", "%s", %d, %d, 0%o, "selabel", %s, "capabilities", 0x%x);' %
             (target_path, zip_file, uid, gid, mode, selabel, capabilities))
 
   def CreateSymbolicLink(self, link_path, target_path, uid, gid):
@@ -444,7 +444,7 @@ class EdifyGenerator(object):
 
   def ChangeMetadata(self, target_path, uid, gid, mode, selabel, capabilities):
     self.script.append(
-        'chmeta("%s", %d, %d, %o, "selabel", "%s", "capabilities", 0x%x);' %
+        'chmeta("%s", %d, %d, 0%o, "selabel", "%s", "capabilities", 0x%x);' %
             (target_path, uid, gid, mode, selabel, capabilities))
 
   def FileCheck(self, filename, sha1, error_msg):
