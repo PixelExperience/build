@@ -1647,20 +1647,14 @@ def WriteBlockIncrementalOTAPackage(target_zip, source_zip, output_file):
 
   device_specific.IncrementalOTA_VerifyBegin()
 
-  # Mount system
-  system_src_partition = source_info["fstab"]["/system"]
-  system_fstype = system_src_partition.fs_type
-  script.CheckAndUnmount("/system_root")
-  script.CheckAndUnmount("/system")
-  script.AppendExtra('mkdir("/system_root", "0", "0", "0700");')
-  script.fstab["/system"].mount_point = "/system_root"
-  script.Mount("/system")
-  script.CreateSymbolicLink("system_root/system", "/system", 0, 0)
-  script.CreateSymbolicLink("system_root", "/root", 0, 0)
+  # Mount all
+  script.RunSetupBusybox()
+  script.RunMountAll()
 
   source_version = os.path.splitext(os.path.basename(OPTIONS.incremental_source))[0]
   error_msg = "Failed to apply update, please download full package at https://download.pixelexperience.org/" + device
   script.AddPixelExperienceVersionAssertion(error_msg, source_version)
+  script.AddPixelExperiencePatchAssertion(error_msg, files_to_patch)
 
   # Check the required cache size (i.e. stashed blocks).
   required_cache_sizes = [diff.required_cache for diff in
@@ -1710,6 +1704,9 @@ def WriteBlockIncrementalOTAPackage(target_zip, source_zip, output_file):
 
   if OPTIONS.extra_script is not None:
     script.AppendExtra(OPTIONS.extra_script)
+
+  # Unmount everything
+  script.RunUmountAll()
 
   script.SetProgress(1)
   script.Print("Success!")
@@ -1829,16 +1826,9 @@ def WriteFileIncrementalOTAPackage(target_zip, source_zip, output_file):
 
   device_specific.IncrementalOTA_VerifyBegin()
 
-  # Mount system
-  system_src_partition = source_info["fstab"]["/system"]
-  system_fstype = system_src_partition.fs_type
-  script.CheckAndUnmount("/system_root")
-  script.CheckAndUnmount("/system")
-  script.AppendExtra('mkdir("/system_root", "0", "0", "0700");')
-  script.fstab["/system"].mount_point = "/system_root"
-  script.Mount("/system")
-  script.CreateSymbolicLink("system_root/system", "/system", 0, 0)
-  script.CreateSymbolicLink("system_root", "/root", 0, 0)
+  # Mount all
+  script.RunSetupBusybox()
+  script.RunMountAll()
 
   source_version = os.path.splitext(os.path.basename(OPTIONS.incremental_source))[0]
   error_msg = "Failed to apply update, please download full package at https://download.pixelexperience.org/" + device
@@ -1850,27 +1840,6 @@ def WriteFileIncrementalOTAPackage(target_zip, source_zip, output_file):
   script.Print("Updating your system...")
 
   device_specific.IncrementalOTA_InstallBegin()
-
-  if HasVendorPartition(target_zip):
-    vendor_src_partition = source_info["fstab"]["/vendor"]
-    vendor_fstype = vendor_src_partition.fs_type
-    script.AppendExtra('mkdir("/vendor", "0", "0", "0700");')
-    script.CheckAndUnmount("/vendor")
-    script.Mount("/vendor")
-
-  if HasProductPartition(target_zip):
-    product_src_partition = source_info["fstab"]["/product"]
-    product_fstype = product_src_partition.fs_type
-    script.AppendExtra('mkdir("/product", "0", "0", "0700");')
-    script.CheckAndUnmount("/product")
-    script.Mount("/product")
-
-  if HasOdmPartition(target_zip):
-    odm_src_partition = source_info["fstab"]["/odm"]
-    odm_fstype = odm_src_partition.fs_type
-    script.AppendExtra('mkdir("/odm", "0", "0", "0700");')
-    script.CheckAndUnmount("/odm")
-    script.Mount("/odm")
 
   system_diff.WriteScript(script, output_zip,
                           progress=0.8)
@@ -1887,9 +1856,6 @@ def WriteFileIncrementalOTAPackage(target_zip, source_zip, output_file):
   if odm_diff:
     odm_diff.WriteScript(script, output_zip, progress=0.1)
 
-  # Unmount everything
-  script.UnmountAll()
-
   if updating_boot:
     script.WriteRawImage("/boot", "boot.img")
     common.ZipWriteStr(output_zip, "boot.img", target_boot.data)
@@ -1899,6 +1865,9 @@ def WriteFileIncrementalOTAPackage(target_zip, source_zip, output_file):
 
   if OPTIONS.extra_script is not None:
     script.AppendExtra(OPTIONS.extra_script)
+
+  # Unmount everything
+  script.RunUmountAll()
 
   script.SetProgress(1)
   script.Print("Success!")
