@@ -1654,7 +1654,6 @@ def WriteBlockIncrementalOTAPackage(target_zip, source_zip, output_file):
   source_version = os.path.splitext(os.path.basename(OPTIONS.incremental_source))[0]
   error_msg = "Failed to apply update, please download full package at https://download.pixelexperience.org/" + device
   script.AddPixelExperienceVersionAssertion(error_msg, source_version)
-  script.AddPixelExperiencePatchAssertion(error_msg, files_to_patch)
 
   # Check the required cache size (i.e. stashed blocks).
   required_cache_sizes = [diff.required_cache for diff in
