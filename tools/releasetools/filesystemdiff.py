@@ -43,25 +43,6 @@ def DataHash(data):
   hasher.update(data)
   return hasher.hexdigest()
 
-def ComputePatch(src_data, tgt_data):
-  src_filename = common.MakeTempFile(prefix='src-')
-  f = open(src_filename, 'w')
-  f.write(src_data)
-  f.close()
-  tgt_filename = common.MakeTempFile(prefix='tgt-')
-  f = open(tgt_filename, 'w')
-  f.write(tgt_data)
-  f.close()
-  patch_filename = common.MakeTempFile(prefix='patch-')
-
-  diff_argv = ['bsdiff', src_filename, tgt_filename, patch_filename]
-  child = subprocess.Popen(diff_argv, stdout=None, stderr=None)
-  child.communicate()
-  if child.returncode != 0:
-    raise RuntimeError("Failed to run %s" % (" ".join(diff_argv)))
-
-  return patch_filename
-
 class FsNode(object):
   S_IFCHR = 0020000 # Unsupported
   S_IFDIR = 0040000
@@ -292,7 +273,6 @@ class FileSystemDiff(object):
         threads = 1
 
     self.threads = threads
-    self.files_to_patch = None
 
     self.partition = partition
     self.zip_partition = self.partition.upper()
@@ -312,103 +292,6 @@ class FileSystemDiff(object):
     else:
       self.src_zip = src
       self.src_fs = FileSystem.from_target_files_zip(self.src_zip, partition)
-
-  def shouldPatchFile(self, file):
-    dont_patch = ['/system_root/system/bin/recovery-persist',
-                    '/system_root/system/bin/install-recovery.sh',
-                    '/system_root/system/recovery-from-boot.p',
-                    '/system_root/system/etc/Changelog.txt',
-                    '/system_root/system/etc/NOTICE.xml.gz',
-                    '/system_root/system/etc/recovery-resource.dat']
-    if (file.startswith('/system_root/') and
-        file.startswith('/system_root/system/') == False):
-      print("Not patching file from root partition: " + file)
-    elif file.endswith('.prop'):
-      print("Not patching .prop file: " + file)
-    elif file.startswith('/system_root/system/etc/security/'):
-      print("Not patching /system_root/system/etc/security/*")
-    elif file.endswith('prop.default'):
-      print("Not patching prop.default file: " + file)
-    elif file in dont_patch:
-      print("Not patching file: " + file)
-    else:
-      print("Patching file: " + file)
-      return True
-    return False
-
-  def GetFilesToPatch(self):
-    if self.files_to_patch is not None:
-      return self.files_to_patch
-    self.files_to_patch = []
-    self._GetFilesToPatch('', self.tgt_fs.root(), self.src_fs.root())
-    return self.files_to_patch
-
-  def _GetFilesToPatch(self, root, tgt, src):
-    if tgt is None:
-      tgt_dirs = {}
-      tgt_files = {}
-    else:
-      tgt_dirs = tgt.dirs()
-      tgt_files = tgt.files()
-    if src is None:
-      src_dirs = {}
-      src_files = {}
-    else:
-      src_dirs = src.dirs()
-      src_files = src.files()
-
-    # Handle directory deletions and changes
-    for src_name, src_dir in src_dirs.items():
-      dirname = "%s/%s" % (root, src_name)
-      fs_dirname = "%s%s" % (self.fs_root, dirname)
-      if not src_name in tgt_dirs:
-        self._GetFilesToPatch(dirname, None, src_dir)
-        continue
-      tgt_dir = tgt_dirs[src_name]
-      if tgt_dir.type() != src_dir.type():
-        self._GetFilesToPatch("%s/%s" % (root, src_name), None, src_dir)
-        continue
-      # Recurse
-      self._GetFilesToPatch(dirname, tgt_dir, src_dir)
-
-    # Handle directory creations
-    for tgt_name, tgt_dir in tgt_dirs.items():
-      dirname = "%s/%s" % (root, tgt_name)
-      fs_dirname = "%s%s" % (self.fs_root, dirname)
-      if tgt_name in src_dirs:
-        src_dir = src_dirs[tgt_name]
-        if src_dir.type() == tgt_dir.type():
-          continue
-      self._GetFilesToPatch(dirname, tgt_dir, None)
-
-    # Handle file deletions and changes
-    for src_name, src_file in src_files.items():
-      filename = "%s/%s" % (root, src_name)
-      fs_filename = "%s%s" % (self.fs_root, filename)
-      if not src_name in tgt_files:
-        continue
-      tgt_file = tgt_files[src_name]
-      if tgt_file.type() != src_file.type():
-        continue
-      if src_file.type() != FsNode.S_IFLNK:
-        zip_filename = "%s%s" % (self.zip_partition, filename)
-        zip_data_filename = fs_filename[1:]
-        src_data = self.src_zip.open(zip_filename).read()
-        tgt_data = self.tgt_zip.open(zip_filename).read()
-        if src_data != tgt_data and self.shouldPatchFile(fs_filename):
-          src_hash = DataHash(src_data)
-          self.files_to_patch.append((fs_filename, src_hash))
-
-    # Handle file creations
-    for tgt_name, tgt_file in tgt_files.items():
-      filename = "%s/%s" % (root, tgt_name)
-      fs_filename = "%s%s" % (self.fs_root, filename)
-      if tgt_name in src_files:
-        src_file = src_files[tgt_name]
-        if src_file.type() == tgt_file.type():
-          continue
-      if tgt_file.type() == FsNode.S_IFDIR:
-        self._GetFilesToPatch(filename, tgt_dir, None)
 
   # XXX: Need to handle all cases here.  In particular:
   #  - File created
@@ -496,12 +379,7 @@ class FileSystemDiff(object):
         src_data = self.src_zip.open(zip_filename).read()
         src_hash = DataHash(src_data)
         tgt_data = self.tgt_zip.open(zip_filename).read()
-        if src_data != tgt_data and (fs_filename, src_hash) in self.files_to_patch:
-          zip_patch_filename = "%s.patch" % (fs_filename[1:])
-          patch_filename = ComputePatch(src_data, tgt_data)
-          self.script.PatchFile(fs_filename, zip_patch_filename, src_hash)
-          self.out_zip.write(patch_filename, zip_patch_filename)
-        elif src_data != tgt_data:
+        if src_data != tgt_data:
           buf = self.tgt_zip.open(zip_filename).read()
           extracted_filename = common.MakeTempFile(prefix='extract-')
           f = open(extracted_filename, 'w')
@@ -551,8 +429,6 @@ class FileSystemDiff(object):
         self.out_zip.write(extracted_filename, zip_data_filename)
 
   def Compute(self, script, out):
-    if self.files_to_patch is None:
-      raise ValueError('files_to_patch is not defined, please call GetFilesToPatch first')
     self.script = script
     self.out_zip = out
     self._Compute('', self.tgt_fs.root(), self.src_fs.root())
