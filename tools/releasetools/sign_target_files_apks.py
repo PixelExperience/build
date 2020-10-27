@@ -397,7 +397,7 @@ def ProcessTargetFiles(input_tf_zip, output_tf_zip, misc_info,
 
   for info in input_tf_zip.infolist():
     filename = info.filename
-    if filename.startswith("IMAGES/") and not filename.endswith("vendor.img"):
+    if filename.startswith("IMAGES/") and not filename.endswith("vendor.img") and not filename.endswith("odm.img"):
       continue
 
     # Skip split super images, which will be re-generated during signing.
