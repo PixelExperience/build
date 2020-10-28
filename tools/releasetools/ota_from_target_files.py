@@ -1651,7 +1651,7 @@ def WriteBlockIncrementalOTAPackage(target_zip, source_zip, output_file):
   script.RunSetupBusybox()
   script.RunMountAll()
 
-  source_version = os.path.splitext(os.path.basename(OPTIONS.incremental_source))[0]
+  source_version = os.path.basename(OPTIONS.incremental_source)[:-4]
   error_msg = "Failed to apply update, please download full package at https://download.pixelexperience.org/" + device
   script.AddPixelExperienceVersionAssertion(error_msg, source_version)
 
@@ -1823,7 +1823,7 @@ def WriteFileIncrementalOTAPackage(target_zip, source_zip, output_file):
   script.RunSetupBusybox()
   script.RunMountAll()
 
-  source_version = os.path.splitext(os.path.basename(OPTIONS.incremental_source))[0]
+  source_version = os.path.basename(OPTIONS.incremental_source)[:-4]
   error_msg = "Failed to apply update, please download full package at https://download.pixelexperience.org/" + device
   script.AddPixelExperienceVersionAssertion(error_msg, source_version)
 
