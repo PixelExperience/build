@@ -1216,7 +1216,7 @@ def main(argv):
   common.ZipClose(output_zip)
 
   # Skip building userdata.img and cache.img when signing the target files.
-  new_args = ["--is_signing", "--add_missing"]
+  new_args = ["--is_signing"]
   # add_img_to_target_files builds the system image from scratch, so the
   # recovery patch is guaranteed to be regenerated there.
   if OPTIONS.rebuild_recovery:
