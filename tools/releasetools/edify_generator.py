@@ -447,13 +447,13 @@ class EdifyGenerator(object):
     self.script.append(cmd)
 
   def RunSetupBusybox(self):
-    self.script.append('run_program("/sbin/sh", "/tmp/install/bin/setup_busybox.sh");')
+    self.script.append('run_program("/tmp/install/bin/busybox ash", "/tmp/install/bin/setup_busybox.sh");')
 
   def RunMountAll(self):
-    self.script.append('run_program("/sbin/sh", "/tmp/install/bin/mount_all.sh");')
+    self.script.append('run_program("/tmp/install/bin/busybox ash", "/tmp/install/bin/mount_all.sh");')
 
   def RunUmountAll(self):
-    self.script.append('run_program("/sbin/sh", "/tmp/install/bin/umount_all.sh");')
+    self.script.append('run_program("/tmp/install/bin/busybox ash", "/tmp/install/bin/umount_all.sh");')
 
   def AddPixelExperienceVersionAssertion(self, error_msg, source_version):
     prop_path = "/system_root/system/build.prop"
