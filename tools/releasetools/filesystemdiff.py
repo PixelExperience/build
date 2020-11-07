@@ -278,9 +278,9 @@ class FileSystemDiff(object):
     self.zip_partition = self.partition.upper()
 
     if self.partition == 'system':
-      self.fs_root = "/%s" % ('system_root/system')
+      self.fs_root = "/%s" % ('system/system')
     elif self.partition == 'root':
-      self.fs_root = "/%s" % ('system_root')
+      self.fs_root = "/%s" % ('system')
     else:
       self.fs_root = "/%s" % (self.partition)
 
