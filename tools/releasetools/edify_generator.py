@@ -456,7 +456,7 @@ class EdifyGenerator(object):
     self.script.append('run_program("/sbin/sh", "/tmp/install/bin/umount_all.sh");')
 
   def AddPixelExperienceVersionAssertion(self, error_msg, source_version):
-    prop_path = "/system_root/system/build.prop"
+    prop_path = "/system/system/build.prop"
     source_version_prop = "org.pixelexperience.version.display"
     self.script.append('assert(try_file_getprop("%s", "%s") == "%s" || abort("%s"));' % (prop_path, source_version_prop, source_version, error_msg))
 
