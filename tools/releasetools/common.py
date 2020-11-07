@@ -2219,11 +2219,11 @@ class BlockDifference(object):
 # It really isn't needed except to maintain consistency with upstream
 # BlockDifference and BlockImageDiff.
 class FileSystemDifference(object):
-  def __init__(self, partition, tgt, src):
+  def __init__(self, partition, tgt, src, use_dynamic_partition):
     self.tgt = tgt
     self.src = src
     self.partition = partition
-    self.diff = filesystemdiff.FileSystemDiff(partition, tgt, src, threads=OPTIONS.worker_threads)
+    self.diff = filesystemdiff.FileSystemDiff(partition, tgt, src, threads=OPTIONS.worker_threads, use_dynamic_partition=use_dynamic_partition)
 
     partition_ = partition
     if partition_ == 'root':
