@@ -370,7 +370,7 @@ class FileSystemDiff(object):
         continue
       if src_file.type() == FsNode.S_IFLNK:
         if src_file.target() != tgt_file.target():
-          self.script.Unlink(fs_filename)
+          self.script.DeleteFile(fs_filename)
           self.script.CreateSymbolicLink(tgt_file.target(), fs_filename,
               tgt_file.uid(), tgt_file.gid())
         if (src_file.uid() != tgt_file.uid() or
