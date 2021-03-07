@@ -172,6 +172,13 @@ endif
 .KATI_READONLY := $(_board_strip_readonly_list)
 
 INTERNAL_KERNEL_CMDLINE := $(BOARD_KERNEL_CMDLINE)
+
+ifneq ($(filter OFFICIAL,$(CUSTOM_BUILD_TYPE)),)
+ifneq ($(filter androidboot.selinux=permissive,$(INTERNAL_KERNEL_CMDLINE)),)
+$(error Permissive selinux in official builds is not allowed)
+endif
+endif
+
 ifeq ($(TARGET_CPU_ABI),)
   $(error No TARGET_CPU_ABI defined by board config: $(board_config_mk))
 endif
