@@ -201,6 +201,20 @@ def AddVendor(output_zip, recovery_img=None, boot_img=None):
   img = OutputFile(output_zip, OPTIONS.input_tmp, "IMAGES", "vendor.img")
   if os.path.exists(img.name):
     logger.info("vendor.img already exists; no need to rebuild...")
+
+    # AVB-sign the image as needed.
+    if OPTIONS.info_dict.get("avb_enable") == "true":
+      logger.info("updating avb hash for prebuilt vendor.img...")
+      avbtool = OPTIONS.info_dict["avb_avbtool"]
+      # The AVB hash footer will be replaced if already present.
+      cmd = [avbtool, "add_hashtree_footer", "--image", img.name,
+             "--partition_name", "vendor"]
+      common.AppendAVBSigningArgs(cmd, "vendor")
+      args = OPTIONS.info_dict.get("avb_vendor_add_hash_footer_args")
+      if args and args.strip():
+        cmd.extend(shlex.split(args))
+      common.RunAndCheckOutput(cmd)
+
     return img.name
 
   def output_sink(fn, data):
@@ -271,6 +285,20 @@ def AddOdm(output_zip):
   img = OutputFile(output_zip, OPTIONS.input_tmp, "IMAGES", "odm.img")
   if os.path.exists(img.name):
     logger.info("odm.img already exists; no need to rebuild...")
+
+    # AVB-sign the image as needed.
+    if OPTIONS.info_dict.get("avb_enable") == "true":
+      logger.info("updating avb hash for prebuilt odm.img...")
+      avbtool = OPTIONS.info_dict["avb_avbtool"]
+      # The AVB hash footer will be replaced if already present.
+      cmd = [avbtool, "add_hashtree_footer", "--image", img.name,
+             "--partition_name", "odm"]
+      common.AppendAVBSigningArgs(cmd, "odm")
+      args = OPTIONS.info_dict.get("avb_odm_add_hash_footer_args")
+      if args and args.strip():
+        cmd.extend(shlex.split(args))
+      common.RunAndCheckOutput(cmd)
+
     return img.name
 
   block_list = OutputFile(
