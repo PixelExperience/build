@@ -44,10 +44,10 @@ $(check_elf_files_stamp): $(my_prebuilt_src_file) $(my_check_elf_file_shared_lib
 CHECK_ELF_FILES.$(check_elf_files_stamp) := 1
 
 ifneq ($(strip $(LOCAL_CHECK_ELF_FILES)),false)
-ifneq ($(strip $(BUILD_BROKEN_PREBUILT_ELF_FILES)),true)
-$(LOCAL_BUILT_MODULE): $(check_elf_files_stamp)
-check-elf-files: $(check_elf_files_stamp)
-endif  # BUILD_BROKEN_PREBUILT_ELF_FILES
+#ifneq ($(strip $(BUILD_BROKEN_PREBUILT_ELF_FILES)),true)
+#$(LOCAL_BUILT_MODULE): $(check_elf_files_stamp)
+#check-elf-files: $(check_elf_files_stamp)
+#endif  # BUILD_BROKEN_PREBUILT_ELF_FILES
 endif  # LOCAL_CHECK_ELF_FILES
 
 endif  # SHARED_LIBRARIES, EXECUTABLES, NATIVE_TESTS

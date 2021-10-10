@@ -44,10 +44,10 @@ endef
 .PHONY: check-elf-prebuilt-product-copy-files
 check-elf-prebuilt-product-copy-files:
 
-check_elf_prebuilt_product_copy_files := true
-ifneq (,$(filter true,$(BUILD_BROKEN_ELF_PREBUILT_PRODUCT_COPY_FILES)))
-check_elf_prebuilt_product_copy_files :=
-endif
+check_elf_prebuilt_product_copy_files := false
+#ifneq (,$(filter true,$(BUILD_BROKEN_ELF_PREBUILT_PRODUCT_COPY_FILES)))
+#check_elf_prebuilt_product_copy_files :=
+#endif
 check_elf_prebuilt_product_copy_files_hint := \
     found ELF prebuilt in PRODUCT_COPY_FILES, use cc_prebuilt_binary / cc_prebuilt_library_shared instead.
 
