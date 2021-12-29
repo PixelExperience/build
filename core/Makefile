@@ -5225,12 +5225,6 @@ ifneq ($(PRODUCT_ODM_DLKM_BASE_FS_PATH),)
 	$(hide) cp $(PRODUCT_ODM_DLKM_BASE_FS_PATH) \
 	  $(zip_root)/META/$(notdir $(PRODUCT_ODM_DLKM_BASE_FS_PATH))
 endif
-ifeq ($(TARGET_OTA_ALLOW_NON_AB),true)
-ifneq ($(INSTALLED_RECOVERYIMAGE_TARGET),)
-	$(hide) PATH=$(INTERNAL_USERIMAGES_BINARY_PATHS):$$PATH MKBOOTIMG=$(MKBOOTIMG) \
-	    $(MAKE_RECOVERY_PATCH) $(zip_root) $(zip_root)
-endif
-endif
 ifeq ($(AB_OTA_UPDATER),true)
 	@# When using the A/B updater, include the updater config files in the zip.
 	$(hide) cp $(TOPDIR)system/update_engine/update_engine.conf $(zip_root)/META/update_engine_config.txt
@@ -5309,6 +5303,12 @@ endif # BOARD_CUSTOMIMAGES_PARTITION_LIST
 	    echo $(part) >> $(zip_root)/META/pack_radioimages.txt;)
 	@# Run fs_config on all the system, vendor, boot ramdisk,
 	@# and recovery ramdisk files in the zip, and save the output
+ifeq ($(TARGET_OTA_ALLOW_NON_AB),true)
+ifneq ($(INSTALLED_RECOVERYIMAGE_TARGET),)
+	$(hide) PATH=$(INTERNAL_USERIMAGES_BINARY_PATHS):$$PATH MKBOOTIMG=$(MKBOOTIMG) \
+	    $(MAKE_RECOVERY_PATCH) $(zip_root) $(zip_root)
+endif
+endif
 ifdef BUILDING_SYSTEM_IMAGE
 	$(hide) $(call fs_config,$(zip_root)/SYSTEM,system/) > $(zip_root)/META/filesystem_config.txt
 endif
