@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "97c63bbb_459be72c",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000554
+      },
+      "writtenOn": "2021-12-31T17:25:26Z",
+      "side": 1,
+      "message": "Building and flashing works for monet and vangogh (Mi 10 Lite 5G | Mi 10 Lite Zoom / Youth Edition)",
+      "revId": "8b58dbb5c3c4478121b2f047234e832fc298fdc8",
+      "serverId": "8ba0da3e-d57f-4bbe-ac74-faf358ba962a"
+    }
+  ]
+}
