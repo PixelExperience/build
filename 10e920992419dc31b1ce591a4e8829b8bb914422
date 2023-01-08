@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "ca35c752_ad6de19b",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000665
+      },
+      "writtenOn": "2023-01-08T17:59:29Z",
+      "side": 1,
+      "message": "fixes a build error as well\n\ncommon.ExternalError: Failed to run command \u0027[\u0027unzip\u0027, \u0027-o\u0027, \u0027-q\u0027, \u0027out/target/product/spes/obj/PACKAGING/target_files_intermediates/aosp_spes-target_files-eng.risen.zip\u0027, \u0027-d\u0027, \u0027/home/risen/android/pe/out/soong/.\ntemp/targetfiles-o5v2iacw\u0027, \u0027SYSTEM/etc/vintf/**\u0027, \u0027VENDOR/etc/vintf/**\u0027, \u0027VENDOR/odm/etc/vintf/**\u0027, \u0027SYSTEM_EXT/etc/vintf/**\u0027, \u0027VENDOR/odm/etc/**\u0027, \u0027META/*\u0027, \u0027*/build.prop\u0027]\u0027 (exit code 12):\nerror: invalid zip file with overlapped components (possible zip bomb)",
+      "revId": "10e920992419dc31b1ce591a4e8829b8bb914422",
+      "serverId": "8ba0da3e-d57f-4bbe-ac74-faf358ba962a"
+    }
+  ]
+}
