@@ -810,6 +810,8 @@ function lunch()
         cd - > /dev/null
     fi
 
+    source_vendorsetup
+
     TARGET_PRODUCT=$product \
     TARGET_BUILD_VARIANT=$variant \
     TARGET_PLATFORM_VERSION=$version \
