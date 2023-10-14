@@ -36,7 +36,6 @@ import org.conscrypt.OpenSSLProvider;
 
 import com.android.apksig.ApkSignerEngine;
 import com.android.apksig.DefaultApkSignerEngine;
-import com.android.apksig.SigningCertificateLineage;
 import com.android.apksig.Hints;
 import com.android.apksig.apk.ApkUtils;
 import com.android.apksig.apk.MinSdkVersionException;
@@ -1096,7 +1095,6 @@ class SignApk {
         Integer minSdkVersionOverride = null;
         boolean signUsingApkSignatureSchemeV2 = true;
         boolean signUsingApkSignatureSchemeV4 = false;
-        SigningCertificateLineage certLineage = null;
         Integer rotationMinSdkVersion = null;
 
         int argstart = 0;
@@ -1148,15 +1146,6 @@ class SignApk {
                 ++argstart;
             } else if ("--enable-v4".equals(args[argstart])) {
                 signUsingApkSignatureSchemeV4 = true;
-                ++argstart;
-            } else if ("--lineage".equals(args[argstart])) {
-                File lineageFile = new File(args[++argstart]);
-                try {
-                    certLineage = SigningCertificateLineage.readFromFile(lineageFile);
-                } catch (Exception e) {
-                    throw new IllegalArgumentException(
-                            "Error reading lineage file: " + e.getMessage());
-                }
                 ++argstart;
             } else if ("--rotation-min-sdk-version".equals(args[argstart])) {
                 String rotationMinSdkVersionString = args[++argstart];
@@ -1264,10 +1253,6 @@ class SignApk {
                     .setV2SigningEnabled(signUsingApkSignatureSchemeV2)
                     .setOtherSignersSignaturesPreserved(false)
                     .setCreatedBy("1.0 (Android SignApk)");
-
-                if (certLineage != null) {
-                   builder = builder.setSigningCertificateLineage(certLineage);
-                }
 
                 if (rotationMinSdkVersion != null) {
                    builder = builder.setMinSdkVersionForRotation(rotationMinSdkVersion);
